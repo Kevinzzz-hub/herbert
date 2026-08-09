@@ -77,6 +77,31 @@ def test_summary_rejects_page_numbers_outside_the_source_chunk() -> None:
         summarize_document(make_chunks()[:1], client)
 
 
+def test_prompt_schema_uses_an_allowed_source_page() -> None:
+    chunks = (TextChunk(1, "--- Page 10 ---\nOnly page", (10,), ()),)
+    final = {
+        "overview": "全文概括",
+        "key_points": [
+            point("第一点", 10),
+            point("第二点", 10),
+            point("第三点", 10),
+        ],
+        "main_conclusion": point("主要结论", 10),
+        "important_concepts": [],
+        "limitations": [],
+    }
+    client = FakeJsonClient([chunk_response("单一分块", 10), final])
+
+    summarize_document(chunks, client)
+
+    assert '"source_pages": [\n        10\n      ]' in client.requests[0][
+        "user_prompt"
+    ]
+    assert "不能据此断言原始 PDF 页面本身损坏" in client.requests[0][
+        "user_prompt"
+    ]
+
+
 def test_summary_rejects_wrong_number_of_final_key_points() -> None:
     final = final_response()
     final["key_points"] = [point("只有一点", 1)]

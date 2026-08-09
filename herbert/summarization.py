@@ -92,12 +92,17 @@ def _summarize_chunk(
 
 
 def _build_chunk_prompt(chunk: TextChunk) -> str:
+    example_page = chunk.source_pages[0]
     schema = {
         "overview": "本分块的一句话概括",
-        "key_points": [{"text": "关键内容", "source_pages": [1]}],
-        "conclusions": [{"text": "局部结论", "source_pages": [1]}],
+        "key_points": [
+            {"text": "关键内容", "source_pages": [example_page]}
+        ],
+        "conclusions": [
+            {"text": "局部结论", "source_pages": [example_page]}
+        ],
         "important_concepts": [
-            {"text": "概念及简短解释", "source_pages": [1]}
+            {"text": "概念及简短解释", "source_pages": [example_page]}
         ],
         "limitations": ["因文本提取问题而无法确认的内容"],
     }
@@ -108,7 +113,7 @@ def _build_chunk_prompt(chunk: TextChunk) -> str:
 要求：
 1. 使用简体中文，提取本分块的主题、关键内容、结论和重要概念。
 2. 每一项只能引用允许范围内、确实支持该说法的页码。
-3. 不猜测缺失内容；文本黏连、乱码、重复或图表信息不全时写入 limitations。
+3. 不猜测缺失内容；文本黏连、乱码、重复或图表信息不全时写入 limitations。质量标记只描述提取文本，不能据此断言原始 PDF 页面本身损坏。
 4. 重复出现的文字不要被当成更重要的证据。
 5. 返回一个 JSON 对象，严格采用以下结构；数组可以为空：
 {json.dumps(schema, ensure_ascii=False, indent=2)}
@@ -123,14 +128,23 @@ def _build_synthesis_prompt(
     summaries: tuple[ChunkSummary, ...],
     allowed_pages: frozenset[int],
 ) -> str:
+    example_pages = sorted(allowed_pages)
+    first_page = example_pages[0]
+    second_page = example_pages[1] if len(example_pages) > 1 else first_page
     schema = {
         "overview": "整份文档的一句话概括",
         "key_points": [
-            {"text": "核心要点，建议共 3 到 7 项", "source_pages": [1, 2]}
+            {
+                "text": "核心要点，建议共 3 到 7 项",
+                "source_pages": [first_page, second_page],
+            }
         ],
-        "main_conclusion": {"text": "主要结论", "source_pages": [2]},
+        "main_conclusion": {
+            "text": "主要结论",
+            "source_pages": [second_page],
+        },
         "important_concepts": [
-            {"text": "概念及简短解释", "source_pages": [1]}
+            {"text": "概念及简短解释", "source_pages": [first_page]}
         ],
         "limitations": ["读者需要留意的文本质量或证据限制"],
     }

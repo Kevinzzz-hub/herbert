@@ -29,3 +29,4 @@ dist/
 # Local documents used for manual testing
 samples/*.pdf
 samples/*.txt
+samples/*.md

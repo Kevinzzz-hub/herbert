@@ -204,7 +204,7 @@ def test_cli_reports_quality_warnings(monkeypatch, tmp_path: Path, capsys) -> No
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "1 页文字较少" in captured.err
-    assert "1 页疑似乱码" in captured.err
+    assert "1 页提取文本疑似乱码" in captured.err
     assert "1 页可能存在词语黏连" in captured.err
     assert "1 页可能存在项目符号编码异常" in captured.err
     assert "1 页与前文重复或高度相似" in captured.err

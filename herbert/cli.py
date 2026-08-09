@@ -146,7 +146,9 @@ def format_quality_message(document: ExtractedDocument) -> str:
     messages = []
 
     _append_flag_message(messages, document, SPARSE_TEXT, "文字较少")
-    _append_flag_message(messages, document, POSSIBLE_GARBLED_TEXT, "疑似乱码")
+    _append_flag_message(
+        messages, document, POSSIBLE_GARBLED_TEXT, "提取文本疑似乱码"
+    )
     _append_flag_message(
         messages, document, POSSIBLE_WORD_JOINING, "可能存在词语黏连"
     )
