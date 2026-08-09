@@ -19,3 +19,15 @@ class UnreadablePdfError(HerbertError):
 
 class NoExtractableTextError(HerbertError):
     """The PDF contains no text Herbert can currently extract."""
+
+
+class MissingApiKeyError(HerbertError):
+    """The DeepSeek API key is not configured on this computer."""
+
+
+class AIServiceError(HerbertError):
+    """DeepSeek could not complete a request."""
+
+
+class InvalidAIResponseError(HerbertError):
+    """DeepSeek returned data that Herbert cannot safely interpret."""

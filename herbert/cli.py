@@ -6,7 +6,13 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from herbert.chunking import MIN_MAX_CHARACTERS, chunk_document, render_chunks
+from herbert.chunking import (
+    DEFAULT_MAX_CHARACTERS,
+    MIN_MAX_CHARACTERS,
+    chunk_document,
+    render_chunks,
+)
+from herbert.deepseek import DeepSeekJsonClient
 from herbert.errors import HerbertError
 from herbert.cleaning import (
     EXACT_DUPLICATE,
@@ -18,6 +24,7 @@ from herbert.cleaning import (
 )
 from herbert.models import ExtractedDocument
 from herbert.pdf import extract_document
+from herbert.summarization import render_document_summary, summarize_document
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -25,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="herbert",
-        description="Extract readable text from a PDF document.",
+        description="Extract and summarize readable text from a PDF document.",
     )
     parser.add_argument("pdf", type=Path, help="path to a text-based PDF")
     parser.add_argument(
@@ -45,6 +52,15 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="CHARACTERS",
         help="group cleaned pages into bounded chunks for later AI processing",
     )
+    parser.add_argument(
+        "--summarize",
+        action="store_true",
+        help="generate a page-cited Markdown summary with DeepSeek",
+    )
+    parser.add_argument(
+        "--model",
+        help="DeepSeek model used with --summarize (default: deepseek-v4-flash)",
+    )
     return parser
 
 
@@ -58,8 +74,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = build_parser().parse_args(argv)
 
-    if args.raw and args.chunk_size is not None:
-        print("错误：--raw 不能与 --chunk-size 同时使用。", file=sys.stderr)
+    if args.raw and (args.chunk_size is not None or args.summarize):
+        print(
+            "错误：--raw 不能与 --chunk-size 或 --summarize 同时使用。",
+            file=sys.stderr,
+        )
+        return 2
+    if args.model and not args.summarize:
+        print("错误：--model 只能与 --summarize 一起使用。", file=sys.stderr)
         return 2
     if args.chunk_size is not None and args.chunk_size < MIN_MAX_CHARACTERS:
         print(
@@ -71,14 +93,35 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         document = extract_document(args.pdf)
         chunks = None
-        if args.chunk_size is not None:
+        if args.summarize:
+            chunks = chunk_document(
+                document,
+                max_characters=args.chunk_size or DEFAULT_MAX_CHARACTERS,
+            )
+            request_count = len(chunks) + 1
+            print(
+                f"正在总结：共 {len(chunks)} 块，预计请求 DeepSeek "
+                f"{request_count} 次…",
+                file=sys.stderr,
+                flush=True,
+            )
+            client = DeepSeekJsonClient.from_environment(model=args.model)
+            summary = summarize_document(chunks, client)
+            text = render_document_summary(summary)
+        elif args.chunk_size is not None:
             chunks = chunk_document(document, max_characters=args.chunk_size)
             text = render_chunks(chunks)
         else:
             text = document.to_text(raw=args.raw)
         if args.output:
             args.output.write_text(text, encoding="utf-8")
-            if chunks is None:
+            if args.summarize:
+                print(
+                    f"总结完成：{len(chunks)} 块，{len(chunks) + 1} 次 "
+                    f"DeepSeek 请求；{args.output}",
+                    flush=True,
+                )
+            elif chunks is None:
                 print(f"提取完成：{args.output}", flush=True)
             else:
                 print(f"分块完成：{len(chunks)} 块；{args.output}", flush=True)

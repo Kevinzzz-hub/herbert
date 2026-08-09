@@ -91,8 +91,44 @@ Run the automated tests:
 python -m pytest
 ```
 
-Text extraction is the first half of V0. AI summarization will be added only
-after extraction has been verified with real documents.
+## DeepSeek summarization
+
+Herbert uses DeepSeek's OpenAI-compatible API. The `openai` Python package is
+only the protocol client here; requests are sent to `https://api.deepseek.com`.
+
+Copy the safe example file and add your own key to the new `.env` file:
+
+```bash
+cp .env.example .env
+```
+
+```dotenv
+DEEPSEEK_API_KEY=your_private_key_here
+DEEPSEEK_MODEL=deepseek-v4-flash
+```
+
+Never paste the key into source code or commit `.env`. Herbert's `.gitignore`
+keeps that private file out of Git.
+
+Generate a page-cited Markdown summary:
+
+```bash
+herbert path/to/document.pdf --summarize --output summary.md
+```
+
+Herbert first summarizes each bounded text chunk, then makes one final request
+to synthesize the document. For example, five chunks use six API requests.
+This makes long documents manageable and keeps the original PDF page numbers
+attached to the summary. A custom chunk size and model can also be selected:
+
+```bash
+herbert path/to/document.pdf --summarize --chunk-size 3000 \
+  --model deepseek-v4-pro --output summary.md
+```
+
+The PDF text is treated as untrusted input: prompts inside a document are not
+instructions for Herbert. AI output can still contain mistakes, so page
+citations are included for verification.
 
 ## Not included in the first version
 

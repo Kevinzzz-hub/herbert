@@ -96,6 +96,69 @@ def test_cli_can_save_bounded_chunks(monkeypatch, tmp_path: Path, capsys) -> Non
     assert "=== Chunk 1 | Page 1 |" in output_file.read_text(encoding="utf-8")
 
 
+def test_cli_can_save_deepseek_summary(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    pdf_file = tmp_path / "document.pdf"
+    output_file = tmp_path / "summary.md"
+    pdf_file.touch()
+    monkeypatch.setattr("herbert.cli.extract_document", lambda _: fake_document())
+
+    responses = [
+        {
+            "overview": "局部概括",
+            "key_points": [{"text": "局部要点", "source_pages": [1]}],
+            "conclusions": [{"text": "局部结论", "source_pages": [1]}],
+            "important_concepts": [],
+            "limitations": [],
+        },
+        {
+            "overview": "全文概括",
+            "key_points": [
+                {"text": "要点一", "source_pages": [1]},
+                {"text": "要点二", "source_pages": [1]},
+                {"text": "要点三", "source_pages": [1]},
+            ],
+            "main_conclusion": {"text": "主要结论", "source_pages": [1]},
+            "important_concepts": [],
+            "limitations": [],
+        },
+    ]
+
+    class FakeClient:
+        def complete_json(self, **_kwargs):
+            return responses.pop(0)
+
+    monkeypatch.setattr(
+        "herbert.cli.DeepSeekJsonClient.from_environment",
+        lambda *, model=None: FakeClient(),
+    )
+
+    exit_code = main(
+        [str(pdf_file), "--summarize", "--output", str(output_file)]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "总结完成：1 块，2 次 DeepSeek 请求" in captured.out
+    assert "预计请求 DeepSeek 2 次" in captured.err
+    assert "全文概括" in output_file.read_text(encoding="utf-8")
+
+
+def test_cli_rejects_raw_summary_combination(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    pdf_file = tmp_path / "document.pdf"
+    pdf_file.touch()
+    monkeypatch.setattr("herbert.cli.extract_document", lambda _: fake_document())
+
+    exit_code = main([str(pdf_file), "--raw", "--summarize"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "不能与" in captured.err
+
+
 def test_cli_rejects_raw_chunking_combination(
     monkeypatch, tmp_path: Path, capsys
 ) -> None:

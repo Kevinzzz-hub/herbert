@@ -50,3 +50,34 @@ class TextChunk:
         """Return the number of characters sent as chunk content."""
 
         return len(self.text)
+
+
+@dataclass(frozen=True, slots=True)
+class SummaryPoint:
+    """One summary statement with traceable PDF source pages."""
+
+    text: str
+    source_pages: tuple[int, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ChunkSummary:
+    """Structured notes produced from one bounded text chunk."""
+
+    chunk_number: int
+    overview: str
+    key_points: tuple[SummaryPoint, ...]
+    conclusions: tuple[SummaryPoint, ...]
+    important_concepts: tuple[SummaryPoint, ...]
+    limitations: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentSummary:
+    """The final, reader-facing summary of a complete PDF."""
+
+    overview: str
+    key_points: tuple[SummaryPoint, ...]
+    main_conclusion: SummaryPoint
+    important_concepts: tuple[SummaryPoint, ...]
+    limitations: tuple[str, ...]
