@@ -34,3 +34,19 @@ class ExtractedDocument:
         """Count how many pages carry each quality flag."""
 
         return Counter(flag for page in self.pages for flag in page.quality_flags)
+
+
+@dataclass(frozen=True, slots=True)
+class TextChunk:
+    """A model-ready piece of text with traceable source pages."""
+
+    chunk_number: int
+    text: str
+    source_pages: tuple[int, ...]
+    quality_flags: tuple[str, ...] = ()
+
+    @property
+    def character_count(self) -> int:
+        """Return the number of characters sent as chunk content."""
+
+        return len(self.text)

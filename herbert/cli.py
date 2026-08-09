@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from herbert.chunking import MIN_MAX_CHARACTERS, chunk_document, render_chunks
 from herbert.errors import HerbertError
 from herbert.cleaning import (
     EXACT_DUPLICATE,
@@ -38,6 +39,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="output uncleaned text while retaining page markers",
     )
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        metavar="CHARACTERS",
+        help="group cleaned pages into bounded chunks for later AI processing",
+    )
     return parser
 
 
@@ -51,12 +58,30 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = build_parser().parse_args(argv)
 
+    if args.raw and args.chunk_size is not None:
+        print("错误：--raw 不能与 --chunk-size 同时使用。", file=sys.stderr)
+        return 2
+    if args.chunk_size is not None and args.chunk_size < MIN_MAX_CHARACTERS:
+        print(
+            f"错误：分块大小不能小于 {MIN_MAX_CHARACTERS} 个字符。",
+            file=sys.stderr,
+        )
+        return 2
+
     try:
         document = extract_document(args.pdf)
-        text = document.to_text(raw=args.raw)
+        chunks = None
+        if args.chunk_size is not None:
+            chunks = chunk_document(document, max_characters=args.chunk_size)
+            text = render_chunks(chunks)
+        else:
+            text = document.to_text(raw=args.raw)
         if args.output:
             args.output.write_text(text, encoding="utf-8")
-            print(f"提取完成：{args.output}")
+            if chunks is None:
+                print(f"提取完成：{args.output}", flush=True)
+            else:
+                print(f"分块完成：{len(chunks)} 块；{args.output}", flush=True)
         else:
             print(text)
         quality_message = format_quality_message(document)

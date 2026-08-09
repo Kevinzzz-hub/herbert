@@ -74,6 +74,54 @@ def test_cli_can_output_raw_text(monkeypatch, tmp_path: Path, capsys) -> None:
     assert captured.out == "--- Page 1 ---\nRaw extracted text\n"
 
 
+def test_cli_can_save_bounded_chunks(monkeypatch, tmp_path: Path, capsys) -> None:
+    pdf_file = tmp_path / "document.pdf"
+    output_file = tmp_path / "chunks.txt"
+    pdf_file.touch()
+    monkeypatch.setattr("herbert.cli.extract_document", lambda _: fake_document())
+
+    exit_code = main(
+        [
+            str(pdf_file),
+            "--chunk-size",
+            "200",
+            "--output",
+            str(output_file),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "分块完成：1 块" in captured.out
+    assert "=== Chunk 1 | Page 1 |" in output_file.read_text(encoding="utf-8")
+
+
+def test_cli_rejects_raw_chunking_combination(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    pdf_file = tmp_path / "document.pdf"
+    pdf_file.touch()
+    monkeypatch.setattr("herbert.cli.extract_document", lambda _: fake_document())
+
+    exit_code = main([str(pdf_file), "--raw", "--chunk-size", "200"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "不能与" in captured.err
+
+
+def test_cli_rejects_zero_chunk_size(monkeypatch, tmp_path: Path, capsys) -> None:
+    pdf_file = tmp_path / "document.pdf"
+    pdf_file.touch()
+    monkeypatch.setattr("herbert.cli.extract_document", lambda _: fake_document())
+
+    exit_code = main([str(pdf_file), "--chunk-size", "0"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "不能小于 200" in captured.err
+
+
 def test_cli_reports_quality_warnings(monkeypatch, tmp_path: Path, capsys) -> None:
     pdf_file = tmp_path / "document.pdf"
     pdf_file.touch()

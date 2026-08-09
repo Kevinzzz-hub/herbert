@@ -76,6 +76,15 @@ Herbert reports pages with sparse text, possible garbled text, joined words,
 unusual bullet encoding, and duplicate content. These warnings do not rewrite
 or delete the source material; they identify pages that may need visual review.
 
+Prepare bounded, page-traceable chunks for later AI processing:
+
+```bash
+herbert path/to/document.pdf --chunk-size 4000 --output chunks.txt
+```
+
+Herbert keeps a page whole whenever it fits. Only a page that exceeds the
+chosen limit is divided, and continued fragments retain the source page number.
+
 Run the automated tests:
 
 ```bash
