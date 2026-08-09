@@ -53,11 +53,28 @@ The current V0 extracts text from a local, text-based PDF:
 herbert path/to/document.pdf
 ```
 
+Every page is kept traceable in the output:
+
+```text
+--- Page 1 ---
+Extracted and conservatively cleaned text...
+```
+
 Save the extracted text to a UTF-8 text file:
 
 ```bash
 herbert path/to/document.pdf --output extracted.txt
 ```
+
+Compare the cleaned output with the original extracted text:
+
+```bash
+herbert path/to/document.pdf --raw --output raw.txt
+```
+
+Herbert reports pages with sparse text, possible garbled text, joined words,
+unusual bullet encoding, and duplicate content. These warnings do not rewrite
+or delete the source material; they identify pages that may need visual review.
 
 Run the automated tests:
 

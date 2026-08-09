@@ -5,13 +5,21 @@ from pathlib import Path
 import pytest
 from pypdf.errors import PdfReadError
 
+from herbert.cleaning import (
+    EXACT_DUPLICATE,
+    NEAR_DUPLICATE,
+    POSSIBLE_GARBLED_TEXT,
+    POSSIBLE_WORD_JOINING,
+    SPARSE_TEXT,
+    SUSPICIOUS_BULLET_ENCODING,
+)
 from herbert.errors import (
     InputFileNotFoundError,
     NoExtractableTextError,
     UnreadablePdfError,
     UnsupportedFileTypeError,
 )
-from herbert.pdf import extract_text
+from herbert.pdf import extract_document, extract_text
 
 
 class FakePage:
@@ -52,14 +60,70 @@ def test_non_pdf_file_is_rejected(tmp_path: Path) -> None:
         extract_text(text_file)
 
 
-def test_text_from_pages_is_joined(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_document_preserves_raw_and_cleaned_page_text(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     pdf_file = create_input_file(tmp_path)
     fake_reader = FakeReader(
-        [FakePage(" First page. "), FakePage("  "), FakePage("Second page.")]
+        [
+            FakePage("Heading•First item•Second item"),
+            FakePage("Second page.\n2"),
+        ]
     )
     monkeypatch.setattr("herbert.pdf.PdfReader", lambda _: fake_reader)
 
-    assert extract_text(pdf_file) == "First page.\n\nSecond page."
+    document = extract_document(pdf_file)
+
+    assert document.pages[0].raw_text == "Heading•First item•Second item"
+    assert document.pages[0].cleaned_text == "Heading\n• First item\n• Second item"
+    assert document.pages[1].cleaned_text == "Second page."
+    assert extract_text(pdf_file) == (
+        "--- Page 1 ---\nHeading\n• First item\n• Second item\n\n"
+        "--- Page 2 ---\nSecond page."
+    )
+
+
+def test_quality_flags_are_explainable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    pdf_file = create_input_file(tmp_path)
+    fake_reader = FakeReader(
+        [
+            FakePage("Short title"),
+            FakePage("QualityProcessToolsMethods make software easier to understand."),
+            FakePage(
+                "FrameworknCommunicationnPlanningnModelingnConstruction and testing"
+            ),
+            FakePage(("A+$" * 40) + " broken font map"),
+        ]
+    )
+    monkeypatch.setattr("herbert.pdf.PdfReader", lambda _: fake_reader)
+
+    document = extract_document(pdf_file)
+
+    assert SPARSE_TEXT in document.pages[0].quality_flags
+    assert POSSIBLE_WORD_JOINING in document.pages[1].quality_flags
+    assert SUSPICIOUS_BULLET_ENCODING in document.pages[2].quality_flags
+    assert POSSIBLE_GARBLED_TEXT in document.pages[3].quality_flags
+
+
+def test_exact_and_near_duplicate_pages_are_marked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    pdf_file = create_input_file(tmp_path)
+    original = "Software testing fundamentals and basic path testing techniques."
+    near_copy = "Software testing fundamentals and basis path testing techniques."
+    fake_reader = FakeReader(
+        [FakePage(original), FakePage(original), FakePage(near_copy)]
+    )
+    monkeypatch.setattr("herbert.pdf.PdfReader", lambda _: fake_reader)
+
+    document = extract_document(pdf_file)
+
+    assert EXACT_DUPLICATE in document.pages[1].quality_flags
+    assert document.pages[1].duplicate_of == 1
+    assert NEAR_DUPLICATE in document.pages[2].quality_flags
+    assert document.pages[2].duplicate_of == 1
 
 
 def test_pdf_without_text_is_rejected(

@@ -11,16 +11,18 @@ from herbert.errors import (
     UnreadablePdfError,
     UnsupportedFileTypeError,
 )
+from herbert.cleaning import assess_page_quality, clean_page_text, mark_duplicate_pages
+from herbert.models import ExtractedDocument, PageText
 
 
-def extract_text(pdf_path: str | Path) -> str:
-    """Extract readable text from a text-based PDF.
+def extract_document(pdf_path: str | Path) -> ExtractedDocument:
+    """Extract a PDF into ordered pages with cleanup and quality metadata.
 
     Args:
         pdf_path: Path to the PDF file.
 
     Returns:
-        Text from all non-empty pages, separated by blank lines.
+        Structured raw and cleaned text for every page.
 
     Raises:
         InputFileNotFoundError: If the path does not point to a file.
@@ -42,20 +44,32 @@ def extract_text(pdf_path: str | Path) -> str:
         if reader.is_encrypted:
             raise UnreadablePdfError("暂不支持加密的 PDF 文件。")
 
-        page_texts = []
-        for page in reader.pages:
-            text = page.extract_text()
-            if text and text.strip():
-                page_texts.append(text.strip())
+        pages = []
+        for page_number, page in enumerate(reader.pages, start=1):
+            raw_text = page.extract_text() or ""
+            cleaned_text = clean_page_text(raw_text, page_number)
+            pages.append(
+                PageText(
+                    page_number=page_number,
+                    raw_text=raw_text,
+                    cleaned_text=cleaned_text,
+                    quality_flags=assess_page_quality(raw_text, cleaned_text),
+                )
+            )
     except UnreadablePdfError:
         raise
     except (PdfReadError, OSError, ValueError) as exc:
         raise UnreadablePdfError("无法读取此 PDF，文件可能已经损坏。") from exc
 
-    combined_text = "\n\n".join(page_texts)
-    if not combined_text:
+    if not any(page.cleaned_text for page in pages):
         raise NoExtractableTextError(
             "此 PDF 暂不适用，请上传能够复制文字的 PDF。"
         )
 
-    return combined_text
+    return ExtractedDocument(pages=mark_duplicate_pages(pages))
+
+
+def extract_text(pdf_path: str | Path) -> str:
+    """Extract cleaned text with page markers for backward compatibility."""
+
+    return extract_document(pdf_path).to_text()
