@@ -30,6 +30,44 @@ The summary will contain:
 - If the uploaded file is not a PDF, Herbert asks the user to upload another file.
 - If no usable text can be extracted, Herbert explains that the PDF is not currently supported.
 
+## Development setup
+
+Herbert requires Python 3.10 or newer. Create an isolated virtual environment and
+install the project with its development tools:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+```
+
+The virtual environment keeps Herbert's packages separate from other Python
+projects. The editable installation (`-e`) means local source changes are used
+without reinstalling the project.
+
+## Current usage
+
+The current V0 extracts text from a local, text-based PDF:
+
+```bash
+herbert path/to/document.pdf
+```
+
+Save the extracted text to a UTF-8 text file:
+
+```bash
+herbert path/to/document.pdf --output extracted.txt
+```
+
+Run the automated tests:
+
+```bash
+python -m pytest
+```
+
+Text extraction is the first half of V0. AI summarization will be added only
+after extraction has been verified with real documents.
+
 ## Not included in the first version
 
 - OCR for scanned PDFs;
@@ -40,7 +78,7 @@ The summary will contain:
 
 ## Roadmap
 
-- **V0 — Prototype:** extract text from a local PDF and generate a summary.
+- **V0 — Prototype (in progress):** extract text from a local PDF and generate a summary.
 - **V1 — Web app:** upload a PDF and read its summary in a browser.
 - **V2 — Reliable summaries:** support longer documents, citations, and better error handling.
 - **V3 — Reading assistant:** add document Q&A and carefully sourced knowledge expansion.
@@ -48,4 +86,6 @@ The summary will contain:
 
 ## Project status
 
-Herbert is currently in the planning and learning stage. Development decisions and progress will be recorded in this repository.
+Herbert is currently in V0 development. PDF validation, text extraction, a
+command-line interface, and automated tests are implemented locally. Development
+decisions and progress will be recorded in this repository.
