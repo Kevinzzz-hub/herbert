@@ -8,8 +8,6 @@ import {
 } from "@/lib/herbert";
 import type { ApiErrorBody, SummaryResult } from "@/lib/types";
 
-export const runtime = "edge";
-
 export async function POST(request: Request) {
   try {
     let input: unknown;

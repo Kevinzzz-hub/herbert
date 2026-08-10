@@ -35,5 +35,8 @@ DEEPSEEK_API_KEY= node --test tests/rendered-html.test.mjs
 npm audit --omit=dev
 ```
 
+`npm run build` verifies the Sites/Cloudflare build. `npm run build:vercel`
+verifies the same app with the native Next.js builder used by Vercel.
+
 See [the Chinese learning guide](../docs/WEB_V1_GUIDE.zh-CN.md) for the design,
 code map, security boundaries, and suggested exercises.
