@@ -10,9 +10,10 @@ Long documents often leave readers unsure about the main argument, important ide
 
 ## MVP
 
-The first version will:
+The project now supports both a command-line prototype and a browser-based V1.
+The web version will:
 
-1. Accept a text-based PDF upload.
+1. Accept a text-based PDF in the browser.
 2. Check whether the uploaded file is a PDF.
 3. Extract text from the document.
 4. Generate an AI-assisted structured summary.
@@ -45,7 +46,7 @@ The virtual environment keeps Herbert's packages separate from other Python
 projects. The editable installation (`-e`) means local source changes are used
 without reinstalling the project.
 
-## Current usage
+## Command-line usage (V0)
 
 The current V0 extracts text from a local, text-based PDF:
 
@@ -130,6 +131,23 @@ The PDF text is treated as untrusted input: prompts inside a document are not
 instructions for Herbert. AI output can still contain mistakes, so page
 citations are included for verification.
 
+## Web app (V1)
+
+The browser version lives in `web/`. It parses the original PDF locally in the
+browser, sends only validated extracted text to the server, and keeps the
+DeepSeek key on the server side.
+
+```bash
+cd web
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Open <http://localhost:3000>, choose a text-based PDF, and select **开始总结**.
+See [`docs/WEB_V1_GUIDE.zh-CN.md`](docs/WEB_V1_GUIDE.zh-CN.md) for a Chinese
+walkthrough of the architecture and each important source file.
+
 ## Not included in the first version
 
 - OCR for scanned PDFs;
@@ -140,14 +158,15 @@ citations are included for verification.
 
 ## Roadmap
 
-- **V0 — Prototype (in progress):** extract text from a local PDF and generate a summary.
-- **V1 — Web app:** upload a PDF and read its summary in a browser.
+- **V0 — Prototype (complete):** extract text from a local PDF and generate a summary.
+- **V1 — Web app (ready to deploy):** upload a PDF and read its summary in a browser.
 - **V2 — Reliable summaries:** support longer documents, citations, and better error handling.
 - **V3 — Reading assistant:** add document Q&A and carefully sourced knowledge expansion.
 - **V4 — Product release:** add tests, deployment, documentation, and a public demo.
 
 ## Project status
 
-Herbert is currently in V0 development. PDF validation, text extraction, a
-command-line interface, and automated tests are implemented locally. Development
-decisions and progress will be recorded in this repository.
+Herbert V0 and the first web V1 are implemented locally. PDF validation, text
+extraction, structured DeepSeek summaries, page citations, download, responsive
+UI, and automated tests are included. Deployment and public feedback are the
+next milestones.

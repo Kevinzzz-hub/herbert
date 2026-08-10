@@ -25,6 +25,8 @@ coverage.xml
 build/
 dist/
 *.egg-info/
+!/web/build/
+!/web/build/sites-vite-plugin.ts
 
 # Local documents used for manual testing
 samples/*.pdf
