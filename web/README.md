@@ -17,6 +17,15 @@ by Git and the key is read only inside the server route.
 
 Open <http://localhost:3000> and upload a PDF that contains selectable text.
 
+## Vercel previews
+
+The Vercel project is linked to `Kevinzzz-hub/herbert` with `web` as its Root
+Directory. Pushing a non-production branch creates a protected preview deployment.
+
+`DEEPSEEK_API_KEY` and `DEEPSEEK_MODEL` are configured in Vercel's Preview
+environment. Keep API keys in Vercel or a local ignored environment file; never
+commit them to Git.
+
 ## How it works
 
 1. The browser checks and extracts page-by-page text from the PDF.
