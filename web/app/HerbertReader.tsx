@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { DocumentQa } from "./DocumentQa";
+import type { TextPage } from "@/lib/herbert";
 import type { ApiErrorBody, SummaryPoint, SummaryResult } from "@/lib/types";
 
 type ViewState = "idle" | "selected" | "loading" | "success" | "error";
@@ -19,6 +21,7 @@ export function HerbertReader() {
   const [isDragging, setIsDragging] = useState(false);
   const [progressStep, setProgressStep] = useState(0);
   const [result, setResult] = useState<SummaryResult | null>(null);
+  const [documentPages, setDocumentPages] = useState<TextPage[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
@@ -34,6 +37,7 @@ export function HerbertReader() {
   const chooseFile = (candidate: File | undefined) => {
     if (!candidate) return;
     setResult(null);
+    setDocumentPages([]);
     setErrorMessage("");
     if (!candidate.name.toLowerCase().endsWith(".pdf")) {
       setFile(null);
@@ -54,6 +58,7 @@ export function HerbertReader() {
   const reset = () => {
     setFile(null);
     setResult(null);
+    setDocumentPages([]);
     setErrorMessage("");
     setProgressStep(0);
     setView("idle");
@@ -67,6 +72,7 @@ export function HerbertReader() {
     try {
       const { extractPdf } = await import("@/lib/pdf");
       const pages = await extractPdf(file);
+      setDocumentPages(pages);
       setProgressStep(2);
       const response = await fetch("/api/summarize", {
         method: "POST",
@@ -103,11 +109,11 @@ export function HerbertReader() {
           <span className="brand-mark" aria-hidden="true"><span /></span>
           <span className="brand-copy"><strong>HERBERT</strong><small>PDF READING ASSISTANT</small></span>
         </button>
-        <span className="privacy-note"><i aria-hidden="true" />原 PDF 留在浏览器，仅提取文字用于本次总结</span>
+        <span className="privacy-note"><i aria-hidden="true" />原 PDF 留在浏览器，仅提取文字用于总结与问答</span>
       </header>
 
       {view === "success" && result ? (
-        <SummaryView result={result} onReset={reset} onDownload={downloadSummary} />
+        <SummaryView result={result} pages={documentPages} onReset={reset} onDownload={downloadSummary} />
       ) : (
         <section className="hero-section">
           <div className="hero-copy">
@@ -170,7 +176,7 @@ export function HerbertReader() {
         </section>
       )}
 
-      <footer className="site-footer"><span>HERBERT · V0</span><p>Named for a great American librarian.</p></footer>
+      <footer className="site-footer"><span>HERBERT · V0.2</span><p>Named for a great American librarian.</p></footer>
     </main>
   );
 }
@@ -207,7 +213,17 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   );
 }
 
-function SummaryView({ result, onReset, onDownload }: { result: SummaryResult; onReset: () => void; onDownload: () => void }) {
+function SummaryView({
+  result,
+  pages,
+  onReset,
+  onDownload,
+}: {
+  result: SummaryResult;
+  pages: TextPage[];
+  onReset: () => void;
+  onDownload: () => void;
+}) {
   const { summary, meta } = result;
   return (
     <article className="summary-page">
@@ -235,6 +251,8 @@ function SummaryView({ result, onReset, onDownload }: { result: SummaryResult; o
       {(summary.limitations.length > 0 || meta.qualityWarnings.length > 0) && (
         <section className="notice-card"><div className="notice-heading"><span aria-hidden="true">i</span><div><p>BEFORE YOU RELY ON IT</p><h2>阅读提示</h2></div></div><ul>{[...summary.limitations, ...meta.qualityWarnings].map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></section>
       )}
+
+      <DocumentQa fileName={meta.fileName} pages={pages} />
     </article>
   );
 }

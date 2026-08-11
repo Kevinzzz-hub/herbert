@@ -32,9 +32,11 @@ commit them to Git.
 2. The server validates the extracted pages and divides the text into bounded chunks.
 3. DeepSeek summarizes the chunks and synthesizes a final structured result.
 4. Herbert validates the JSON and page citations before displaying the result.
+5. Follow-up questions retrieve relevant pages and return grounded, page-cited answers.
 
 The original PDF remains in the browser. Only extracted text is sent for the
-one-time summary. Herbert does not currently provide accounts or reading history.
+summary and follow-up answers. Herbert does not currently provide accounts or
+saved reading history.
 
 ## Verification
 
@@ -49,3 +51,6 @@ verifies the same app with the native Next.js builder used by Vercel.
 
 See [the Chinese learning guide](../docs/WEB_V1_GUIDE.zh-CN.md) for the design,
 code map, security boundaries, and suggested exercises.
+
+See [the question-answering module guide](../docs/QA_MODULE_GUIDE.zh-CN.md) for
+the retrieval flow, validation rules, and acceptance checklist.

@@ -5,6 +5,7 @@ import {
   HerbertWebError,
   summarizePages,
   validateExtractedPages,
+  validatePdfFileName,
 } from "@/lib/herbert";
 import type { ApiErrorBody, SummaryResult } from "@/lib/types";
 
@@ -20,14 +21,7 @@ export async function POST(request: Request) {
       throw new HerbertWebError("INVALID_REQUEST", "提交内容格式不正确，请重新上传 PDF。");
     }
     const payload = input as Record<string, unknown>;
-    if (
-      typeof payload.fileName !== "string"
-      || !payload.fileName.trim().toLowerCase().endsWith(".pdf")
-      || payload.fileName.length > 255
-    ) {
-      throw new HerbertWebError("MISSING_FILE", "请选择一份 PDF 后再开始总结。");
-    }
-    const fileName = payload.fileName.trim();
+    const fileName = validatePdfFileName(payload.fileName);
     const pages = validateExtractedPages(payload.pages);
 
     const qualityWarnings = assessTextQuality(pages);

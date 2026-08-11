@@ -24,6 +24,25 @@ export interface SummaryResult {
   meta: SummaryMeta;
 }
 
+export interface DocumentQuestionAnswer {
+  text: string;
+  sourcePages: number[];
+  status: "supported" | "insufficient";
+}
+
+export interface QuestionAnswerResult {
+  answer: DocumentQuestionAnswer;
+  meta: {
+    consideredPages: number[];
+    requestCount: number;
+  };
+}
+
+export interface QuestionHistoryItem {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface ApiErrorBody {
   error: {
     code: string;
