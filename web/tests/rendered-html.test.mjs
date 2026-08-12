@@ -25,7 +25,7 @@ test("server-renders the Herbert upload experience", async () => {
   assert.match(html, /<title>Herbert — PDF 阅读助手<\/title>/i);
   assert.match(html, /读完一份 PDF/);
   assert.match(html, /选择 PDF/);
-  assert.match(html, /原 PDF 留在浏览器，仅提取文字用于总结与问答/);
+  assert.match(html, /原 PDF 留在浏览器，仅提取文字用于总结、问答与学习材料/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });
 
@@ -134,4 +134,74 @@ test("keeps the PDF in the browser while adding the question interface", async (
   assert.doesNotMatch(questionPanel, /DEEPSEEK_API_KEY|api\.deepseek\.com/);
   assert.match(questionRoute, /validateExtractedPages\(payload\.pages\)/);
   assert.match(questionRoute, /validateQuestionHistory\(payload\.history\)/);
+});
+
+test("validates the summary before generating study materials", async () => {
+  const readableText = "Software engineering uses process, methods, and tools to build quality software. ".repeat(3);
+  const validSummary = {
+    overview: "Software engineering is a layered technology.",
+    keyPoints: [
+      { text: "Quality is the foundation.", sourcePages: [1] },
+      { text: "Process organizes the work.", sourcePages: [1] },
+      { text: "Methods and tools support construction.", sourcePages: [1] },
+    ],
+    mainConclusion: { text: "The layers work together.", sourcePages: [1] },
+    importantConcepts: [{ text: "Process: a framework for activities.", sourcePages: [1] }],
+    limitations: [],
+  };
+  const validResponse = await dispatch(new Request("http://localhost/api/study", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      fileName: "software.pdf",
+      pages: [{ pageNumber: 1, text: readableText }],
+      summary: validSummary,
+    }),
+  }));
+  assert.equal(validResponse.status, 503);
+  assert.equal((await validResponse.json()).error.code, "MISSING_KEY");
+
+  const forgedSummary = structuredClone(validSummary);
+  forgedSummary.keyPoints[0].sourcePages = [99];
+  const forgedResponse = await dispatch(new Request("http://localhost/api/study", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      fileName: "software.pdf",
+      pages: [{ pageNumber: 1, text: readableText }],
+      summary: forgedSummary,
+    }),
+  }));
+  assert.equal(forgedResponse.status, 400);
+  assert.equal((await forgedResponse.json()).error.code, "INVALID_SUMMARY");
+
+  const missingSummaryResponse = await dispatch(new Request("http://localhost/api/study", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      fileName: "software.pdf",
+      pages: [{ pageNumber: 1, text: readableText }],
+      summary: null,
+    }),
+  }));
+  assert.equal(missingSummaryResponse.status, 400);
+  assert.equal((await missingSummaryResponse.json()).error.code, "INVALID_SUMMARY");
+});
+
+test("adds interactive flashcards and a scored quiz without exposing secrets", async () => {
+  const [reader, studyLab, studyRoute, server] = await Promise.all([
+    readFile(new URL("../app/HerbertReader.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/StudyLab.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/study/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/herbert.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(reader, /<StudyLab fileName=\{meta\.fileName\} pages=\{pages\} summary=\{summary\}/);
+  assert.match(studyLab, /fetch\("\/api\/study"/);
+  assert.match(studyLab, /setIsRevealed\(\(current\) => !current\)/);
+  assert.match(studyLab, /correctCount/);
+  assert.match(studyLab, /依据：第/);
+  assert.doesNotMatch(studyLab, /DEEPSEEK_API_KEY|api\.deepseek\.com/);
+  assert.match(studyRoute, /validateStudySummary\(payload\.summary, allowedPages\)/);
+  assert.match(server, /correct_option_index/);
+  assert.match(server, /每题必须恰好有 4 个互不重复的选项和唯一正确答案/);
 });

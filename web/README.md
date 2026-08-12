@@ -33,9 +33,10 @@ commit them to Git.
 3. DeepSeek summarizes the chunks and synthesizes a final structured result.
 4. Herbert validates the JSON and page citations before displaying the result.
 5. Follow-up questions retrieve relevant pages and return grounded, page-cited answers.
+6. A study request turns summary-backed pages into flashcards and a five-question quiz.
 
 The original PDF remains in the browser. Only extracted text is sent for the
-summary and follow-up answers. Herbert does not currently provide accounts or
+summary, follow-up answers, and study materials. Herbert does not currently provide accounts or
 saved reading history.
 
 ## Verification
@@ -54,3 +55,6 @@ code map, security boundaries, and suggested exercises.
 
 See [the question-answering module guide](../docs/QA_MODULE_GUIDE.zh-CN.md) for
 the retrieval flow, validation rules, and acceptance checklist.
+
+See [the study module guide](../docs/STUDY_MODULE_GUIDE.zh-CN.md) for the
+flashcard and quiz data flow, validation rules, and acceptance checklist.

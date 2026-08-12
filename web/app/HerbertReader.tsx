@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { DocumentQa } from "./DocumentQa";
+import { StudyLab } from "./StudyLab";
 import type { TextPage } from "@/lib/herbert";
 import type { ApiErrorBody, SummaryPoint, SummaryResult } from "@/lib/types";
 
@@ -109,7 +110,7 @@ export function HerbertReader() {
           <span className="brand-mark" aria-hidden="true"><span /></span>
           <span className="brand-copy"><strong>HERBERT</strong><small>PDF READING ASSISTANT</small></span>
         </button>
-        <span className="privacy-note"><i aria-hidden="true" />原 PDF 留在浏览器，仅提取文字用于总结与问答</span>
+        <span className="privacy-note"><i aria-hidden="true" />原 PDF 留在浏览器，仅提取文字用于总结、问答与学习材料</span>
       </header>
 
       {view === "success" && result ? (
@@ -176,7 +177,7 @@ export function HerbertReader() {
         </section>
       )}
 
-      <footer className="site-footer"><span>HERBERT · V0.2</span><p>Named for a great American librarian.</p></footer>
+      <footer className="site-footer"><span>HERBERT · V0.3</span><p>Named for a great American librarian.</p></footer>
     </main>
   );
 }
@@ -253,6 +254,8 @@ function SummaryView({
       )}
 
       <DocumentQa fileName={meta.fileName} pages={pages} />
+
+      <StudyLab fileName={meta.fileName} pages={pages} summary={summary} />
     </article>
   );
 }

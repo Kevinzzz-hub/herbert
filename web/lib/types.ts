@@ -43,6 +43,33 @@ export interface QuestionHistoryItem {
   content: string;
 }
 
+export interface StudyCard {
+  front: string;
+  back: string;
+  sourcePages: number[];
+}
+
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  correctOptionIndex: number;
+  explanation: string;
+  sourcePages: number[];
+}
+
+export interface StudyPack {
+  cards: StudyCard[];
+  quiz: QuizQuestion[];
+}
+
+export interface StudyPackResult {
+  studyPack: StudyPack;
+  meta: {
+    consideredPages: number[];
+    requestCount: number;
+  };
+}
+
 export interface ApiErrorBody {
   error: {
     code: string;
