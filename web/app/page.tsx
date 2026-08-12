@@ -1,5 +1,5 @@
-import { HerbertReader } from "./HerbertReader";
+import { CourseLibrary } from "./CourseLibrary";
 
 export default function Home() {
-  return <HerbertReader />;
+  return <CourseLibrary />;
 }

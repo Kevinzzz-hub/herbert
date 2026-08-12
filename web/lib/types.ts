@@ -76,3 +76,19 @@ export interface ApiErrorBody {
     message: string;
   };
 }
+
+export interface Course {
+  id: string;
+  title: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CourseListResult {
+  courses: Course[];
+}
+
+export interface CourseResult {
+  course: Course;
+}

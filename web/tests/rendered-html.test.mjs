@@ -17,16 +17,36 @@ async function render() {
   return dispatch(new Request("http://localhost/", { headers: { accept: "text/html" } }));
 }
 
-test("server-renders the Herbert upload experience", async () => {
+test("server-renders the Herbert course library", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
   assert.match(html, /<title>Herbert — PDF 阅读助手<\/title>/i);
-  assert.match(html, /读完一份 PDF/);
-  assert.match(html, /选择 PDF/);
-  assert.match(html, /原 PDF 留在浏览器，仅提取文字用于总结、问答与学习材料/);
+  assert.match(html, /把每门课/);
+  assert.match(html, /新建课程/);
+  assert.match(html, /正在打开你的课程书架/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
+});
+
+test("keeps course persistence server-side and protects workspace records", async () => {
+  const [library, coursesRoute, workspace, migration] = await Promise.all([
+    readFile(new URL("../app/CourseLibrary.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/courses/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/course-workspace.ts", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260812120335_create_course_workspaces.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(library, /fetch\("\/api\/courses"/);
+  assert.match(library, /method: "POST"/);
+  assert.doesNotMatch(library, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(coursesRoute, /workspace_id/);
+  assert.match(coursesRoute, /getWorkspace\(\{ create: false \}\)/);
+  assert.match(workspace, /httpOnly: true/);
+  assert.match(workspace, /createHash\("sha256"\)/);
+  assert.doesNotMatch(workspace, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(migration, /enable row level security/);
+  assert.match(migration, /revoke all .* anon, authenticated/);
+  assert.match(migration, /references public\.workspaces\(id\) on delete cascade/);
 });
 
 test("removes starter assets and keeps secrets server-side", async () => {

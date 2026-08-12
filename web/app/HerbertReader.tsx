@@ -15,7 +15,13 @@ const progressSteps = [
   "合并全文重点与页码",
 ];
 
-export function HerbertReader() {
+export function HerbertReader({
+  courseName,
+  onBackToCourses,
+}: {
+  courseName?: string;
+  onBackToCourses?: () => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [view, setView] = useState<ViewState>("idle");
@@ -106,12 +112,17 @@ export function HerbertReader() {
   return (
     <main className={`app-shell ${view === "success" ? "has-result" : ""}`}>
       <header className="site-header">
-        <button className="brand" type="button" onClick={reset} aria-label="返回 Herbert 首页">
+        <button className="brand" type="button" onClick={reset} aria-label="返回 Herbert 阅读首页">
           <span className="brand-mark" aria-hidden="true"><span /></span>
           <span className="brand-copy"><strong>HERBERT</strong><small>PDF READING ASSISTANT</small></span>
         </button>
-        <span className="privacy-note"><i aria-hidden="true" />原 PDF 留在浏览器，仅提取文字用于总结、问答与学习材料</span>
+        <div className="reader-header-actions">
+          {courseName && onBackToCourses ? <button type="button" onClick={onBackToCourses}>← 我的课程</button> : null}
+          <span className="privacy-note"><i aria-hidden="true" />原 PDF 留在浏览器，仅提取文字用于总结、问答与学习材料</span>
+        </div>
       </header>
+
+      {courseName ? <div className="course-context"><span>CURRENT COURSE</span><strong>{courseName}</strong><small>V0.4.1 中 PDF 结果暂未保存到课程</small></div> : null}
 
       {view === "success" && result ? (
         <SummaryView result={result} pages={documentPages} onReset={reset} onDownload={downloadSummary} />
@@ -177,7 +188,7 @@ export function HerbertReader() {
         </section>
       )}
 
-      <footer className="site-footer"><span>HERBERT · V0.3</span><p>Named for a great American librarian.</p></footer>
+      <footer className="site-footer"><span>HERBERT · V0.4</span><p>Named for a great American librarian.</p></footer>
     </main>
   );
 }
