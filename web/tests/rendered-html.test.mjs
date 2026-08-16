@@ -246,7 +246,7 @@ test("adds interactive flashcards and a scored quiz without exposing secrets", a
   assert.match(server, /每题必须恰好有 4 个互不重复的选项和唯一正确答案/);
 });
 
-test("uses passwordless login and a server-only Supabase Vault", async () => {
+test("uses same-browser email OTP login and a server-only Supabase Vault", async () => {
   const [authGate, accountRoute, credentialServer, migration, envExample, summaryRoute] = await Promise.all([
     readFile(new URL("../app/AuthGate.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/account/api-key/route.ts", import.meta.url), "utf8"),
@@ -256,6 +256,10 @@ test("uses passwordless login and a server-only Supabase Vault", async () => {
     readFile(new URL("../app/api/summarize/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(authGate, /signInWithOtp/);
+  assert.match(authGate, /verifyOtp/);
+  assert.match(authGate, /autoComplete="one-time-code"/);
+  assert.match(authGate, /type: "email"/);
+  assert.doesNotMatch(authGate, /emailRedirectTo/);
   assert.match(authGate, /authenticatedFetch\("\/api\/account\/api-key"/);
   assert.doesNotMatch(authGate, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(accountRoute, /requireAuthenticatedUser\(request\)/);

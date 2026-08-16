@@ -6,18 +6,36 @@
 
 这一版采用 BYOK（Bring Your Own Key，用户自带密钥）模式：用户登录 Herbert 后，连接自己的 DeepSeek API Key。总结、问答和学习材料产生的模型费用由用户自己的 DeepSeek 账户承担。
 
-## 为什么选择无密码登录
+## 为什么选择邮箱验证码登录
 
-Herbert 使用 Supabase Magic Link：用户只输入邮箱，然后点击邮箱里的一次性链接。
+Herbert 使用 Supabase Email OTP：用户输入邮箱，收到 6 位一次性验证码，再回到原来的 Herbert 页面输入验证码。
+
+最初版本使用 Magic Link。测试时发现，QQ 邮箱可能在 Safari 或邮件内置浏览器里打开链接，而 Herbert 位于另一个浏览器。Supabase 会在打开链接的浏览器里建立登录会话，因此原来的 Herbert 页面仍显示未登录。验证码方案把最后一步留在原页面，避免跨浏览器会话丢失。
 
 这样做的好处是：
 
 - Herbert 不接触和保存用户密码；
 - 没有“忘记密码”和重置密码流程；
 - Supabase 负责登录会话、刷新令牌和退出登录；
-- 第一次使用和以后登录采用同一套界面。
+- 第一次使用和以后登录采用同一套界面；
+- 不需要把带有登录凭证的链接复制到另一个浏览器。
 
 在正式公开发布前，需要给 Supabase 配置自定义 SMTP 邮件服务。Supabase 自带邮件服务适合开发测试，不适合大量公开用户。
+
+Supabase 的 `signInWithOtp` 同时支持 Magic Link 和 Email OTP。使用哪一种由邮件模板决定：模板包含 `{{ .ConfirmationURL }}` 时发送链接，包含 `{{ .Token }}` 时发送验证码。Herbert 使用 `verifyOtp({ email, token, type: "email" })` 在当前浏览器建立会话。
+
+### Supabase 邮件模板
+
+在 Supabase Dashboard 打开 `Authentication → Email Templates → Magic Link`，把正文改为：
+
+```html
+<h2>你的 Herbert 登录验证码</h2>
+<p>请回到 Herbert，在原页面输入下面的 6 位验证码：</p>
+<p style="font-size: 32px; font-weight: 700; letter-spacing: 8px;">{{ .Token }}</p>
+<p>验证码只能使用一次。若不是你本人操作，请忽略这封邮件。</p>
+```
+
+模板里不要继续放 `{{ .ConfirmationURL }}`，否则 Supabase 仍会发送魔法链接。
 
 ## API Key 的安全边界
 
@@ -72,18 +90,20 @@ Supabase Vault
 ## 验收步骤
 
 1. 未登录时只能看到邮箱登录页。
-2. 输入邮箱并打开收到的一次性登录链接。
-3. 第一次登录后，页面要求连接 DeepSeek API Key。
-4. 输入错误 Key，确认 Herbert 拒绝保存。
-5. 输入正确 Key，确认页面显示末尾四位并进入课程书架。
-6. 上传 PDF 并生成总结，确认使用自己的 DeepSeek 账户。
-7. 在“管理 AI”中替换或删除 Key。
-8. 删除 Key 后，确认必须重新连接才能继续使用 AI。
-9. 退出登录，确认课程内容不会显示给另一个账号。
+2. 输入邮箱，收到验证码后留在 Herbert 原页面。
+3. 输入 6 位验证码并登录。
+4. 第一次登录后，页面要求连接 DeepSeek API Key。
+5. 输入错误 Key，确认 Herbert 拒绝保存。
+6. 输入正确 Key，确认页面显示末尾四位并进入课程书架。
+7. 上传 PDF 并生成总结，确认使用自己的 DeepSeek 账户。
+8. 在“管理 AI”中替换或删除 Key。
+9. 删除 Key 后，确认必须重新连接才能继续使用 AI。
+10. 退出登录，确认课程内容不会显示给另一个账号。
 
 ## 仍需在公开发布前完成
 
 - 配置自定义 SMTP 和 Herbert 品牌登录邮件；
+- 增加 Google 或 GitHub 快捷登录，作为邮箱验证码之外的可选入口；
 - 增加验证码或 CAPTCHA，降低批量注册风险；
 - 增加服务条款、隐私说明和账号删除功能；
 - 为 API 接口增加用户级速率限制；

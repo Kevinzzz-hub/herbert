@@ -105,7 +105,7 @@ export function AuthGate() {
     );
   }
   if (state === "signed-out" || !session) {
-    return <MagicLinkSignIn />;
+    return <EmailOtpSignIn />;
   }
   if (state === "needs-key" || !keyStatus?.configured) {
     return (
@@ -144,27 +144,63 @@ export function AuthGate() {
   );
 }
 
-function MagicLinkSignIn() {
+function EmailOtpSignIn() {
   const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
+  const [resendAvailableIn, setResendAvailableIn] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const sendLink = async () => {
+  useEffect(() => {
+    if (resendAvailableIn <= 0) return;
+    const timer = window.setTimeout(() => {
+      setResendAvailableIn((current) => Math.max(0, current - 1));
+    }, 1_000);
+    return () => window.clearTimeout(timer);
+  }, [resendAvailableIn]);
+
+  const sendCode = async () => {
     if (!email.trim() || isSending) return;
     setIsSending(true);
     setErrorMessage("");
     const { error } = await getSupabaseBrowserClient().auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: window.location.origin, shouldCreateUser: true },
+      options: { shouldCreateUser: true },
     });
     if (error) {
-      setErrorMessage(error.message.includes("rate") ? "登录邮件发送太频繁，请稍后再试。" : "登录邮件暂时无法发送，请检查邮箱后重试。");
+      const isRateLimited = error.status === 429 || error.message.toLowerCase().includes("rate");
+      setErrorMessage(isRateLimited ? "验证码发送太频繁，请等待 60 秒后再试。" : "验证码暂时无法发送，请检查邮箱后重试。");
       setIsSending(false);
       return;
     }
-    setSent(true);
+    setCodeSent(true);
+    setResendAvailableIn(60);
     setIsSending(false);
+  };
+
+  const verifyCode = async () => {
+    const token = otp.replace(/\D/g, "");
+    if (token.length !== 6 || isVerifying) return;
+    setIsVerifying(true);
+    setErrorMessage("");
+    const { data, error } = await getSupabaseBrowserClient().auth.verifyOtp({
+      email: email.trim(),
+      token,
+      type: "email",
+    });
+    if (error || !data.session) {
+      setErrorMessage("验证码不正确或已经过期，请确认后重试。");
+      setIsVerifying(false);
+    }
+  };
+
+  const changeEmail = () => {
+    setCodeSent(false);
+    setOtp("");
+    setResendAvailableIn(0);
+    setErrorMessage("");
   };
 
   return (
@@ -172,16 +208,41 @@ function MagicLinkSignIn() {
       <div className="auth-card">
         <p className="account-kicker">YOUR PRIVATE STUDY SPACE</p>
         <h1>登录 Herbert，<br /><em>使用自己的 AI。</em></h1>
-        <p className="auth-description">输入邮箱，我们会发送一次性登录链接。第一次登录会自动建立账号，不需要记住新密码。</p>
-        {sent ? (
-          <div className="mail-sent" role="status">
-            <span>✓</span><div><strong>登录链接已经发送</strong><p>请在邮箱中打开链接。完成后会自动回到 Herbert。</p></div>
-          </div>
+        <p className="auth-description">输入邮箱获取 6 位验证码，然后留在这个页面完成登录。第一次登录会自动建立账号，不需要记住新密码。</p>
+        {codeSent ? (
+          <>
+            <div className="mail-sent" role="status">
+              <span>6</span><div><strong>验证码已经发送</strong><p>请查看 {email.trim()} 的邮件，并把 6 位数字输入下方。不要点击旧的登录链接。</p></div>
+            </div>
+            <form className="otp-form" onSubmit={(event) => { event.preventDefault(); void verifyCode(); }}>
+              <label htmlFor="account-otp">6 位验证码</label>
+              <input
+                id="account-otp"
+                className="otp-input"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                required
+                value={otp}
+                onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="000000"
+                aria-describedby="otp-help"
+              />
+              <small id="otp-help">验证码默认 1 小时内有效；同一个验证码只能使用一次。</small>
+              <button type="submit" disabled={otp.length !== 6 || isVerifying}>{isVerifying ? "正在验证" : "验证并登录"}<span>→</span></button>
+            </form>
+            <div className="auth-secondary-actions">
+              <button type="button" onClick={changeEmail}>换一个邮箱</button>
+              <button type="button" onClick={() => void sendCode()} disabled={isSending || resendAvailableIn > 0}>{isSending ? "正在重发" : resendAvailableIn > 0 ? `${resendAvailableIn} 秒后可重发` : "重新发送验证码"}</button>
+            </div>
+          </>
         ) : (
-          <form onSubmit={(event) => { event.preventDefault(); void sendLink(); }}>
+          <form onSubmit={(event) => { event.preventDefault(); void sendCode(); }}>
             <label htmlFor="account-email">邮箱地址</label>
             <input id="account-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" />
-            <button type="submit" disabled={!email.trim() || isSending}>{isSending ? "正在发送" : "发送登录链接"}<span>→</span></button>
+            <button type="submit" disabled={!email.trim() || isSending}>{isSending ? "正在发送" : "发送 6 位验证码"}<span>→</span></button>
           </form>
         )}
         {errorMessage ? <p className="account-error" role="alert">{errorMessage}</p> : null}
