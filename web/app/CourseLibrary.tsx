@@ -1,13 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createLocalCourse, deleteLocalCourse, listLocalCourses } from "@/lib/local-library";
+import {
+  claimLegacyLocalRecords,
+  createLocalCourse,
+  deleteLocalCourse,
+  listLocalCourses,
+} from "@/lib/local-library";
 import type { Course } from "@/lib/types";
 import { HerbertReader } from "./HerbertReader";
 
 type LibraryState = "loading" | "ready" | "error";
 
-export function CourseLibrary() {
+export function CourseLibrary({
+  ownerId,
+  accountEmail,
+  keyHint,
+  onManageKey,
+  onSignOut,
+}: {
+  ownerId: string;
+  accountEmail: string;
+  keyHint: string;
+  onManageKey: () => void;
+  onSignOut: () => void;
+}) {
   const [state, setState] = useState<LibraryState>("loading");
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
@@ -19,7 +36,7 @@ export function CourseLibrary() {
     setState("loading");
     setErrorMessage("");
     try {
-      setCourses(await listLocalCourses());
+      setCourses(await listLocalCourses(ownerId));
       setState("ready");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "课程书架暂时无法打开。");
@@ -32,7 +49,8 @@ export function CourseLibrary() {
 
     async function loadInitialCourses() {
       try {
-        const localCourses = await listLocalCourses();
+        await claimLegacyLocalRecords(ownerId);
+        const localCourses = await listLocalCourses(ownerId);
         if (isCurrent) {
           setCourses(localCourses);
           setState("ready");
@@ -49,13 +67,14 @@ export function CourseLibrary() {
     return () => {
       isCurrent = false;
     };
-  }, []);
+  }, [ownerId]);
 
   if (selectedCourse) {
     return (
       <HerbertReader
         courseId={selectedCourse.id}
         courseName={selectedCourse.title}
+        ownerId={ownerId}
         onBackToCourses={() => {
           setSelectedCourse(null);
           void loadCourses();
@@ -66,13 +85,13 @@ export function CourseLibrary() {
 
   return (
     <main className="library-shell">
-      <LibraryHeader />
+      <LibraryHeader accountEmail={accountEmail} keyHint={keyHint} onManageKey={onManageKey} onSignOut={onSignOut} />
       <section className="library-page">
         <div className="library-intro">
           <div>
             <p className="eyebrow">YOUR STUDY LIBRARY</p>
             <h1>把每门课，<br /><em>放进自己的书架。</em></h1>
-            <p>课程会把同一主题的 PDF、总结和复习材料组织在一起。所有记录只保存在当前浏览器，不需要账号或云数据库。</p>
+            <p>课程会把同一主题的 PDF、总结和复习材料组织在一起。学习记录保存在当前浏览器，并按登录账号隔离。</p>
           </div>
           <button className="primary-button library-create-button" type="button" onClick={() => setIsCreating(true)}>
             新建课程 <span aria-hidden="true">＋</span>
@@ -81,6 +100,7 @@ export function CourseLibrary() {
 
         {isCreating ? (
           <CourseForm
+            ownerId={ownerId}
             onCancel={() => setIsCreating(false)}
             onCreated={(course) => {
               setCourses((current) => [course, ...current]);
@@ -126,9 +146,10 @@ export function CourseLibrary() {
           </section>
         ) : null}
       </section>
-      <footer className="site-footer"><span>HERBERT · V0.4</span><p>One shelf for every course.</p></footer>
+      <footer className="site-footer"><span>HERBERT · V0.5</span><p>One shelf for every course.</p></footer>
       {courseToDelete ? (
         <DeleteCourseDialog
+          ownerId={ownerId}
           course={courseToDelete}
           onCancel={() => setCourseToDelete(null)}
           onDeleted={(courseId) => {
@@ -141,19 +162,33 @@ export function CourseLibrary() {
   );
 }
 
-function LibraryHeader() {
+function LibraryHeader({
+  accountEmail,
+  keyHint,
+  onManageKey,
+  onSignOut,
+}: {
+  accountEmail: string;
+  keyHint: string;
+  onManageKey: () => void;
+  onSignOut: () => void;
+}) {
   return (
     <header className="site-header library-header">
       <div className="brand" aria-label="Herbert 课程书架">
         <span className="brand-mark" aria-hidden="true"><span /></span>
         <span className="brand-copy"><strong>HERBERT</strong><small>COURSE READING LIBRARY</small></span>
       </div>
-        <span className="privacy-note"><i aria-hidden="true" />课程与文档只保存在这个浏览器</span>
+      <div className="library-account-actions">
+        <div><span>{accountEmail}</span><strong>{keyHint}</strong></div>
+        <button type="button" onClick={onManageKey}>管理 AI</button>
+        <button type="button" onClick={onSignOut}>退出</button>
+      </div>
     </header>
   );
 }
 
-function CourseForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (course: Course) => void }) {
+function CourseForm({ ownerId, onCancel, onCreated }: { ownerId: string; onCancel: () => void; onCreated: (course: Course) => void }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -164,7 +199,7 @@ function CourseForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
     setIsSaving(true);
     setErrorMessage("");
     try {
-      onCreated(await createLocalCourse({ title, description }));
+      onCreated(await createLocalCourse({ ownerId, title, description }));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "课程暂时无法创建。");
     } finally {
@@ -187,7 +222,7 @@ function CourseForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
   );
 }
 
-function DeleteCourseDialog({ course, onCancel, onDeleted }: { course: Course; onCancel: () => void; onDeleted: (id: string) => void }) {
+function DeleteCourseDialog({ ownerId, course, onCancel, onDeleted }: { ownerId: string; course: Course; onCancel: () => void; onDeleted: (id: string) => void }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -195,7 +230,7 @@ function DeleteCourseDialog({ course, onCancel, onDeleted }: { course: Course; o
     setIsDeleting(true);
     setErrorMessage("");
     try {
-      await deleteLocalCourse(course.id);
+      await deleteLocalCourse(ownerId, course.id);
       onDeleted(course.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "课程暂时无法删除。");

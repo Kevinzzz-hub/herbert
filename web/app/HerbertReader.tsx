@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { CourseDocuments, type DocumentShelfState } from "./CourseDocuments";
 import { DocumentQa } from "./DocumentQa";
 import { StudyLab } from "./StudyLab";
@@ -27,10 +28,12 @@ const progressSteps = [
 export function HerbertReader({
   courseId,
   courseName,
+  ownerId,
   onBackToCourses,
 }: {
   courseId: string;
   courseName: string;
+  ownerId: string;
   onBackToCourses?: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -51,18 +54,18 @@ export function HerbertReader({
     setDocumentState("loading");
     setDocumentError("");
     try {
-      setDocuments(await listLocalDocuments(courseId));
+      setDocuments(await listLocalDocuments(ownerId, courseId));
       setDocumentState("ready");
     } catch (error) {
       setDocumentError(error instanceof Error ? error.message : "本机文档记录暂时无法读取。");
       setDocumentState("error");
     }
-  }, [courseId]);
+  }, [courseId, ownerId]);
 
   useEffect(() => {
     let cancelled = false;
 
-    listLocalDocuments(courseId).then((savedDocuments) => {
+    listLocalDocuments(ownerId, courseId).then((savedDocuments) => {
       if (cancelled) return;
       setDocuments(savedDocuments);
       setDocumentState("ready");
@@ -75,7 +78,7 @@ export function HerbertReader({
     return () => {
       cancelled = true;
     };
-  }, [courseId]);
+  }, [courseId, ownerId]);
 
   useEffect(() => {
     if (view !== "loading") return;
@@ -127,7 +130,7 @@ export function HerbertReader({
     setProgressStep(2);
     setDocumentPages(document.pages);
     try {
-      const response = await fetch("/api/summarize", {
+      const response = await authenticatedFetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileName: document.fileName, pages: document.pages }),
@@ -136,14 +139,14 @@ export function HerbertReader({
       if (!response.ok || "error" in body) {
         throw new Error("error" in body ? body.error.message : "Herbert 暂时无法完成总结，请稍后重试。");
       }
-      await completeLocalDocument(document.id, body);
+      await completeLocalDocument(ownerId, document.id, body);
       setResult({ ...body, documentId: document.id });
       await loadDocuments();
       setView("success");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Herbert 暂时无法完成总结，请稍后重试。";
       try {
-        await markLocalDocumentFailed(document.id, message);
+        await markLocalDocumentFailed(ownerId, document.id, message);
         await loadDocuments();
       } catch {
         // The original error remains the most useful message for the reader.
@@ -166,6 +169,7 @@ export function HerbertReader({
       setDocumentPages(pages);
       setProgressStep(2);
       const document = await createPendingDocument({
+        ownerId,
         courseId,
         fileName: file.name,
         fileSize: file.size,
@@ -191,7 +195,7 @@ export function HerbertReader({
 
   const retryDocument = async (document: CourseDocument) => {
     try {
-      const pending = await markLocalDocumentPending(document.id);
+      const pending = await markLocalDocumentPending(ownerId, document.id);
       setDocuments((current) => current.map((item) => item.id === pending.id ? pending : item));
       await generateSummary(pending);
     } catch (error) {
@@ -204,7 +208,7 @@ export function HerbertReader({
     if (!window.confirm(`删除“${document.fileName}”的本机记录、提取文字和总结吗？`)) return;
     setBusyDocumentId(document.id);
     try {
-      await deleteLocalDocument(document.id);
+      await deleteLocalDocument(ownerId, document.id);
       setDocuments((current) => current.filter((item) => item.id !== document.id));
     } catch (error) {
       setDocumentError(error instanceof Error ? error.message : "这份记录暂时无法删除。");

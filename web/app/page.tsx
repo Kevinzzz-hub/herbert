@@ -1,5 +1,5 @@
-import { CourseLibrary } from "./CourseLibrary";
+import { AuthGate } from "./AuthGate";
 
 export default function Home() {
-  return <CourseLibrary />;
+  return <AuthGate />;
 }

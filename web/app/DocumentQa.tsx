@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import type { TextPage } from "@/lib/herbert";
 import type {
   ApiErrorBody,
@@ -51,7 +52,7 @@ export function DocumentQa({ fileName, pages }: { fileName: string; pages: TextP
     setIsAnswering(true);
 
     try {
-      const response = await fetch("/api/ask", {
+      const response = await authenticatedFetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileName, pages, question: currentQuestion, history }),

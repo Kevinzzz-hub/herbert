@@ -2,12 +2,15 @@ import type { Course, CourseDocument, SummaryResult } from "./types";
 import type { TextPage } from "./herbert";
 
 const DATABASE_NAME = "herbert-learning-library";
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 const COURSE_STORE = "courses";
 const DOCUMENT_STORE = "documents";
+const OWNER_INDEX = "ownerId";
+const OWNER_COURSE_INDEX = "ownerCourse";
 
 interface StoredCourse {
   id: string;
+  ownerId: string;
   title: string;
   description: string;
   createdAt: string;
@@ -21,19 +24,31 @@ export class LocalLibraryError extends Error {
   }
 }
 
-export async function listLocalCourses(): Promise<Course[]> {
+export async function claimLegacyLocalRecords(ownerId: string): Promise<void> {
+  const database = await openDatabase();
+  const transaction = database.transaction([COURSE_STORE, DOCUMENT_STORE], "readwrite");
+  claimUnownedRecords(transaction.objectStore(COURSE_STORE), ownerId);
+  claimUnownedRecords(transaction.objectStore(DOCUMENT_STORE), ownerId);
+  await transactionComplete(transaction);
+  database.close();
+}
+
+export async function listLocalCourses(ownerId: string): Promise<Course[]> {
   const database = await openDatabase();
   const courses = await requestResult<StoredCourse[]>(
-    database.transaction(COURSE_STORE, "readonly").objectStore(COURSE_STORE).getAll(),
+    database.transaction(COURSE_STORE, "readonly")
+      .objectStore(COURSE_STORE)
+      .index(OWNER_INDEX)
+      .getAll(IDBKeyRange.only(ownerId)),
   );
-  const counts = await documentCounts(database, courses.map((course) => course.id));
+  const counts = await documentCounts(database, ownerId, courses.map((course) => course.id));
   database.close();
   return courses
     .map((course) => ({ ...course, documentCount: counts.get(course.id) ?? 0 }))
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
-export async function createLocalCourse(input: { title: string; description: string }): Promise<Course> {
+export async function createLocalCourse(input: { ownerId: string; title: string; description: string }): Promise<Course> {
   const title = input.title.trim();
   const description = input.description.trim();
   if (!title || title.length > 80 || description.length > 240) {
@@ -42,6 +57,7 @@ export async function createLocalCourse(input: { title: string; description: str
   const timestamp = new Date().toISOString();
   const course: Course = {
     id: crypto.randomUUID(),
+    ownerId: input.ownerId,
     title,
     description,
     documentCount: 0,
@@ -56,8 +72,15 @@ export async function createLocalCourse(input: { title: string; description: str
   return course;
 }
 
-export async function deleteLocalCourse(courseId: string): Promise<void> {
+export async function deleteLocalCourse(ownerId: string, courseId: string): Promise<void> {
   const database = await openDatabase();
+  const course = await requestResult<StoredCourse | undefined>(
+    database.transaction(COURSE_STORE, "readonly").objectStore(COURSE_STORE).get(courseId),
+  );
+  if (!course || course.ownerId !== ownerId) {
+    database.close();
+    throw new LocalLibraryError("没有找到这门课程。");
+  }
   const transaction = database.transaction([COURSE_STORE, DOCUMENT_STORE], "readwrite");
   transaction.objectStore(COURSE_STORE).delete(courseId);
   const documentStore = transaction.objectStore(DOCUMENT_STORE);
@@ -72,28 +95,29 @@ export async function deleteLocalCourse(courseId: string): Promise<void> {
   database.close();
 }
 
-export async function listLocalDocuments(courseId: string): Promise<CourseDocument[]> {
+export async function listLocalDocuments(ownerId: string, courseId: string): Promise<CourseDocument[]> {
   const database = await openDatabase();
   const documents = await requestResult<CourseDocument[]>(
     database.transaction(DOCUMENT_STORE, "readonly")
       .objectStore(DOCUMENT_STORE)
-      .index("courseId")
-      .getAll(IDBKeyRange.only(courseId)),
+      .index(OWNER_COURSE_INDEX)
+      .getAll(IDBKeyRange.only([ownerId, courseId])),
   );
   database.close();
   return documents.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
-export async function getLocalDocument(documentId: string): Promise<CourseDocument | null> {
+export async function getLocalDocument(ownerId: string, documentId: string): Promise<CourseDocument | null> {
   const database = await openDatabase();
   const document = await requestResult<CourseDocument | undefined>(
     database.transaction(DOCUMENT_STORE, "readonly").objectStore(DOCUMENT_STORE).get(documentId),
   );
   database.close();
-  return document ?? null;
+  return document?.ownerId === ownerId ? document : null;
 }
 
 export async function createPendingDocument(input: {
+  ownerId: string;
   courseId: string;
   fileName: string;
   fileSize: number;
@@ -103,6 +127,7 @@ export async function createPendingDocument(input: {
   const timestamp = new Date().toISOString();
   const document: CourseDocument = {
     id: crypto.randomUUID(),
+    ownerId: input.ownerId,
     courseId: input.courseId,
     fileName: input.fileName,
     fileSize: input.fileSize,
@@ -116,15 +141,16 @@ export async function createPendingDocument(input: {
     createdAt: timestamp,
     updatedAt: timestamp,
   };
-  await putDocument(document);
+  await putDocument(input.ownerId, document);
   return document;
 }
 
 export async function completeLocalDocument(
+  ownerId: string,
   documentId: string,
   result: SummaryResult,
 ): Promise<CourseDocument> {
-  const document = await requireDocument(documentId);
+  const document = await requireDocument(ownerId, documentId);
   const completed: CourseDocument = {
     ...document,
     summary: result.summary,
@@ -133,13 +159,13 @@ export async function completeLocalDocument(
     errorMessage: "",
     updatedAt: new Date().toISOString(),
   };
-  await putDocument(completed);
+  await putDocument(ownerId, completed);
   return completed;
 }
 
-export async function markLocalDocumentFailed(documentId: string, message: string): Promise<void> {
-  const document = await requireDocument(documentId);
-  await putDocument({
+export async function markLocalDocumentFailed(ownerId: string, documentId: string, message: string): Promise<void> {
+  const document = await requireDocument(ownerId, documentId);
+  await putDocument(ownerId, {
     ...document,
     status: "failed",
     errorMessage: message.slice(0, 500),
@@ -147,19 +173,20 @@ export async function markLocalDocumentFailed(documentId: string, message: strin
   });
 }
 
-export async function markLocalDocumentPending(documentId: string): Promise<CourseDocument> {
-  const document = await requireDocument(documentId);
+export async function markLocalDocumentPending(ownerId: string, documentId: string): Promise<CourseDocument> {
+  const document = await requireDocument(ownerId, documentId);
   const pending = {
     ...document,
     status: "pending" as const,
     errorMessage: "",
     updatedAt: new Date().toISOString(),
   };
-  await putDocument(pending);
+  await putDocument(ownerId, pending);
   return pending;
 }
 
-export async function deleteLocalDocument(documentId: string): Promise<void> {
+export async function deleteLocalDocument(ownerId: string, documentId: string): Promise<void> {
+  await requireDocument(ownerId, documentId);
   const database = await openDatabase();
   const transaction = database.transaction(DOCUMENT_STORE, "readwrite");
   transaction.objectStore(DOCUMENT_STORE).delete(documentId);
@@ -167,13 +194,14 @@ export async function deleteLocalDocument(documentId: string): Promise<void> {
   database.close();
 }
 
-async function requireDocument(documentId: string): Promise<CourseDocument> {
-  const document = await getLocalDocument(documentId);
+async function requireDocument(ownerId: string, documentId: string): Promise<CourseDocument> {
+  const document = await getLocalDocument(ownerId, documentId);
   if (!document) throw new LocalLibraryError("没有找到这份本地文档记录。");
   return document;
 }
 
-async function putDocument(document: CourseDocument): Promise<void> {
+async function putDocument(ownerId: string, document: CourseDocument): Promise<void> {
+  if (document.ownerId !== ownerId) throw new LocalLibraryError("这份文档不属于当前账号。");
   const database = await openDatabase();
   const transaction = database.transaction([COURSE_STORE, DOCUMENT_STORE], "readwrite");
   transaction.objectStore(DOCUMENT_STORE).put(document);
@@ -181,20 +209,24 @@ async function putDocument(document: CourseDocument): Promise<void> {
   const courseRequest = courseStore.get(document.courseId);
   courseRequest.onsuccess = () => {
     const course = courseRequest.result as StoredCourse | undefined;
-    if (course) courseStore.put({ ...course, updatedAt: document.updatedAt });
+    if (!course || course.ownerId !== ownerId) {
+      transaction.abort();
+      return;
+    }
+    courseStore.put({ ...course, updatedAt: document.updatedAt });
   };
   await transactionComplete(transaction);
   database.close();
 }
 
-async function documentCounts(database: IDBDatabase, courseIds: string[]): Promise<Map<string, number>> {
+async function documentCounts(database: IDBDatabase, ownerId: string, courseIds: string[]): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
   if (!courseIds.length) return counts;
   const transaction = database.transaction(DOCUMENT_STORE, "readonly");
   const completion = transactionComplete(transaction);
-  const index = transaction.objectStore(DOCUMENT_STORE).index("courseId");
+  const index = transaction.objectStore(DOCUMENT_STORE).index(OWNER_COURSE_INDEX);
   await Promise.all(courseIds.map(async (courseId) => {
-    counts.set(courseId, await requestResult<number>(index.count(IDBKeyRange.only(courseId))));
+    counts.set(courseId, await requestResult<number>(index.count(IDBKeyRange.only([ownerId, courseId]))));
   }));
   await completion;
   return counts;
@@ -203,6 +235,7 @@ async function documentCounts(database: IDBDatabase, courseIds: string[]): Promi
 function stripDocumentCount(course: Course): StoredCourse {
   return {
     id: course.id,
+    ownerId: course.ownerId,
     title: course.title,
     description: course.description,
     createdAt: course.createdAt,
@@ -216,18 +249,42 @@ function openDatabase(): Promise<IDBDatabase> {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
     request.onupgradeneeded = () => {
       const database = request.result;
-      if (!database.objectStoreNames.contains(COURSE_STORE)) {
-        database.createObjectStore(COURSE_STORE, { keyPath: "id" });
+      const courseStore = database.objectStoreNames.contains(COURSE_STORE)
+        ? request.transaction!.objectStore(COURSE_STORE)
+        : database.createObjectStore(COURSE_STORE, { keyPath: "id" });
+      if (!courseStore.indexNames.contains(OWNER_INDEX)) {
+        courseStore.createIndex(OWNER_INDEX, "ownerId", { unique: false });
       }
       if (!database.objectStoreNames.contains(DOCUMENT_STORE)) {
         const documentStore = database.createObjectStore(DOCUMENT_STORE, { keyPath: "id" });
         documentStore.createIndex("courseId", "courseId", { unique: false });
+        documentStore.createIndex(OWNER_INDEX, "ownerId", { unique: false });
+        documentStore.createIndex(OWNER_COURSE_INDEX, ["ownerId", "courseId"], { unique: false });
+      } else {
+        const documentStore = request.transaction!.objectStore(DOCUMENT_STORE);
+        if (!documentStore.indexNames.contains(OWNER_INDEX)) {
+          documentStore.createIndex(OWNER_INDEX, "ownerId", { unique: false });
+        }
+        if (!documentStore.indexNames.contains(OWNER_COURSE_INDEX)) {
+          documentStore.createIndex(OWNER_COURSE_INDEX, ["ownerId", "courseId"], { unique: false });
+        }
       }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(new LocalLibraryError());
     request.onblocked = () => reject(new LocalLibraryError("本地学习记录正在被另一个页面占用，请关闭其他 Herbert 页面后重试。"));
   });
+}
+
+function claimUnownedRecords(store: IDBObjectStore, ownerId: string): void {
+  const cursorRequest = store.openCursor();
+  cursorRequest.onsuccess = () => {
+    const cursor = cursorRequest.result;
+    if (!cursor) return;
+    const value = cursor.value as { ownerId?: string };
+    if (!value.ownerId) cursor.update({ ...value, ownerId });
+    cursor.continue();
+  };
 }
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import type { TextPage } from "@/lib/herbert";
 import type {
   ApiErrorBody,
@@ -31,7 +32,7 @@ export function StudyLab({
     setIsGenerating(true);
     setErrorMessage("");
     try {
-      const response = await fetch("/api/study", {
+      const response = await authenticatedFetch("/api/study", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileName, pages, summary }),

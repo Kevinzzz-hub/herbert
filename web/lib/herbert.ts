@@ -440,19 +440,19 @@ export function selectRelevantPages(
   return selected;
 }
 
-export async function deepSeekJson(
+export function createDeepSeekJson(apiKey: string): JsonCompletion {
+  const credential = apiKey.trim();
+  if (!credential) {
+    throw new HerbertWebError("API_KEY_REQUIRED", "请先连接你自己的 DeepSeek API Key。", 428);
+  }
+  return (systemPrompt, userPrompt) => deepSeekJson(systemPrompt, userPrompt, credential);
+}
+
+async function deepSeekJson(
   systemPrompt: string,
   userPrompt: string,
+  apiKey: string,
 ): Promise<unknown> {
-  const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
-  if (!apiKey) {
-    throw new HerbertWebError(
-      "MISSING_KEY",
-      "服务器尚未配置 DeepSeek 密钥，请联系 Herbert 管理员。",
-      503,
-    );
-  }
-
   let response: Response;
   try {
     response = await fetch("https://api.deepseek.com/chat/completions", {

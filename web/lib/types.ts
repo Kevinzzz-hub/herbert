@@ -80,6 +80,7 @@ export interface ApiErrorBody {
 
 export interface Course {
   id: string;
+  ownerId: string;
   title: string;
   description: string;
   documentCount: number;
@@ -99,6 +100,7 @@ export type CourseDocumentStatus = "pending" | "complete" | "failed";
 
 export interface CourseDocument {
   id: string;
+  ownerId: string;
   courseId: string;
   fileName: string;
   fileSize: number;

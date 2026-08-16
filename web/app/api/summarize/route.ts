@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 import {
   assessTextQuality,
-  deepSeekJson,
+  createDeepSeekJson,
   HerbertWebError,
   summarizePages,
   validateExtractedPages,
   validatePdfFileName,
 } from "@/lib/herbert";
+import { requireUserDeepSeekKey } from "@/lib/user-api-key";
 import type { ApiErrorBody, SummaryResult } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
+    const deepSeekJson = createDeepSeekJson(await requireUserDeepSeekKey(request));
     let input: unknown;
     try {
       input = await request.json();
