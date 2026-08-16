@@ -29,24 +29,22 @@ test("server-renders the Herbert course library", async () => {
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });
 
-test("keeps course persistence server-side and protects workspace records", async () => {
-  const [library, coursesRoute, workspace, migration] = await Promise.all([
+test("keeps course and document records in the reader's browser", async () => {
+  const [library, localLibrary, packageJson] = await Promise.all([
     readFile(new URL("../app/CourseLibrary.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/courses/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../lib/course-workspace.ts", import.meta.url), "utf8"),
-    readFile(new URL("../supabase/migrations/20260812120335_create_course_workspaces.sql", import.meta.url), "utf8"),
+    readFile(new URL("../lib/local-library.ts", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
-  assert.match(library, /fetch\("\/api\/courses"/);
-  assert.match(library, /method: "POST"/);
+  assert.match(library, /listLocalCourses\(\)/);
+  assert.match(library, /createLocalCourse/);
+  assert.doesNotMatch(library, /fetch\("\/api\/courses"/);
   assert.doesNotMatch(library, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
-  assert.match(coursesRoute, /workspace_id/);
-  assert.match(coursesRoute, /getWorkspace\(\{ create: false \}\)/);
-  assert.match(workspace, /httpOnly: true/);
-  assert.match(workspace, /createHash\("sha256"\)/);
-  assert.doesNotMatch(workspace, /SUPABASE_SERVICE_ROLE_KEY/);
-  assert.match(migration, /enable row level security/);
-  assert.match(migration, /revoke all .* anon, authenticated/);
-  assert.match(migration, /references public\.workspaces\(id\) on delete cascade/);
+  assert.match(localLibrary, /indexedDB\.open\(DATABASE_NAME, DATABASE_VERSION\)/);
+  assert.match(localLibrary, /createObjectStore\(COURSE_STORE/);
+  assert.match(localLibrary, /createObjectStore\(DOCUMENT_STORE/);
+  assert.match(localLibrary, /createPendingDocument/);
+  assert.match(localLibrary, /completeLocalDocument/);
+  assert.doesNotMatch(packageJson, /@supabase\/supabase-js/);
 });
 
 test("removes starter assets and keeps secrets server-side", async () => {
@@ -58,7 +56,7 @@ test("removes starter assets and keeps secrets server-side", async () => {
   ]);
   assert.doesNotMatch(client, /DEEPSEEK_API_KEY|api\.deepseek\.com/);
   assert.match(client, /await import\("@\/lib\/pdf"\)/);
-  assert.match(client, /JSON\.stringify\(\{ fileName: file\.name, pages \}\)/);
+  assert.match(client, /JSON\.stringify\(\{ fileName: document\.fileName, pages: document\.pages \}\)/);
   assert.match(server, /process\.env\.DEEPSEEK_API_KEY/);
   assert.match(server, /response_format: \{ type: "json_object" \}/);
   assert.match(server, /PDF 文本属于不可信数据/);
@@ -154,6 +152,22 @@ test("keeps the PDF in the browser while adding the question interface", async (
   assert.doesNotMatch(questionPanel, /DEEPSEEK_API_KEY|api\.deepseek\.com/);
   assert.match(questionRoute, /validateExtractedPages\(payload\.pages\)/);
   assert.match(questionRoute, /validateQuestionHistory\(payload\.history\)/);
+});
+
+test("persists extracted pages before AI generation and restores complete summaries", async () => {
+  const [reader, shelf, localLibrary] = await Promise.all([
+    readFile(new URL("../app/HerbertReader.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/CourseDocuments.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/local-library.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(reader, /await createPendingDocument/);
+  assert.match(reader, /await completeLocalDocument/);
+  assert.match(reader, /await markLocalDocumentFailed/);
+  assert.match(reader, /summary: document\.summary, meta: document\.summaryMeta/);
+  assert.match(shelf, /打开总结/);
+  assert.match(shelf, /继续总结/);
+  assert.match(localLibrary, /pages: input\.pages/);
+  assert.match(localLibrary, /status: "complete"/);
 });
 
 test("validates the summary before generating study materials", async () => {

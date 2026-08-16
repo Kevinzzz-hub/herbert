@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ApiErrorBody, Course, CourseListResult, CourseResult } from "@/lib/types";
+import { createLocalCourse, deleteLocalCourse, listLocalCourses } from "@/lib/local-library";
+import type { Course } from "@/lib/types";
 import { HerbertReader } from "./HerbertReader";
 
 type LibraryState = "loading" | "ready" | "error";
@@ -18,12 +19,7 @@ export function CourseLibrary() {
     setState("loading");
     setErrorMessage("");
     try {
-      const response = await fetch("/api/courses", { cache: "no-store" });
-      const body = await response.json() as CourseListResult | ApiErrorBody;
-      if (!response.ok || "error" in body) {
-        throw new Error("error" in body ? body.error.message : "课程书架暂时无法打开。");
-      }
-      setCourses(body.courses);
+      setCourses(await listLocalCourses());
       setState("ready");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "课程书架暂时无法打开。");
@@ -36,13 +32,9 @@ export function CourseLibrary() {
 
     async function loadInitialCourses() {
       try {
-        const response = await fetch("/api/courses", { cache: "no-store" });
-        const body = await response.json() as CourseListResult | ApiErrorBody;
-        if (!response.ok || "error" in body) {
-          throw new Error("error" in body ? body.error.message : "课程书架暂时无法打开。");
-        }
+        const localCourses = await listLocalCourses();
         if (isCurrent) {
-          setCourses(body.courses);
+          setCourses(localCourses);
           setState("ready");
         }
       } catch (error) {
@@ -62,8 +54,12 @@ export function CourseLibrary() {
   if (selectedCourse) {
     return (
       <HerbertReader
+        courseId={selectedCourse.id}
         courseName={selectedCourse.title}
-        onBackToCourses={() => setSelectedCourse(null)}
+        onBackToCourses={() => {
+          setSelectedCourse(null);
+          void loadCourses();
+        }}
       />
     );
   }
@@ -76,7 +72,7 @@ export function CourseLibrary() {
           <div>
             <p className="eyebrow">YOUR STUDY LIBRARY</p>
             <h1>把每门课，<br /><em>放进自己的书架。</em></h1>
-            <p>课程会把同一主题的 PDF、总结和复习材料组织在一起。现在先建立书架，下一步再把文档真正保存进课程。</p>
+            <p>课程会把同一主题的 PDF、总结和复习材料组织在一起。所有记录只保存在当前浏览器，不需要账号或云数据库。</p>
           </div>
           <button className="primary-button library-create-button" type="button" onClick={() => setIsCreating(true)}>
             新建课程 <span aria-hidden="true">＋</span>
@@ -119,7 +115,7 @@ export function CourseLibrary() {
                   <p>COURSE</p>
                   <h3>{course.title}</h3>
                   <div className="course-description">{course.description || "还没有课程说明。进入后可以开始阅读第一份 PDF。"}</div>
-                  <div className="course-card-meta"><span>等待添加 PDF</span><span>云端保存</span></div>
+                  <div className="course-card-meta"><span>{course.documentCount} 份 PDF</span><span>本机保存</span></div>
                   <div className="course-card-actions">
                     <button className="open-course" type="button" onClick={() => setSelectedCourse(course)}>进入课程 <span>→</span></button>
                     <button className="delete-course" type="button" onClick={() => setCourseToDelete(course)} aria-label={`删除课程 ${course.title}`}>删除</button>
@@ -152,7 +148,7 @@ function LibraryHeader() {
         <span className="brand-mark" aria-hidden="true"><span /></span>
         <span className="brand-copy"><strong>HERBERT</strong><small>COURSE READING LIBRARY</small></span>
       </div>
-      <span className="privacy-note"><i aria-hidden="true" />课程已保存在你的私人工作区</span>
+        <span className="privacy-note"><i aria-hidden="true" />课程与文档只保存在这个浏览器</span>
     </header>
   );
 }
@@ -168,16 +164,7 @@ function CourseForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
     setIsSaving(true);
     setErrorMessage("");
     try {
-      const response = await fetch("/api/courses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, description }),
-      });
-      const body = await response.json() as CourseResult | ApiErrorBody;
-      if (!response.ok || "error" in body) {
-        throw new Error("error" in body ? body.error.message : "课程暂时无法创建。");
-      }
-      onCreated(body.course);
+      onCreated(await createLocalCourse({ title, description }));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "课程暂时无法创建。");
     } finally {
@@ -208,11 +195,7 @@ function DeleteCourseDialog({ course, onCancel, onDeleted }: { course: Course; o
     setIsDeleting(true);
     setErrorMessage("");
     try {
-      const response = await fetch(`/api/courses/${course.id}`, { method: "DELETE" });
-      if (!response.ok) {
-        const body = await response.json() as ApiErrorBody;
-        throw new Error(body.error.message);
-      }
+      await deleteLocalCourse(course.id);
       onDeleted(course.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "课程暂时无法删除。");
@@ -224,7 +207,7 @@ function DeleteCourseDialog({ course, onCancel, onDeleted }: { course: Course; o
     <div className="dialog-backdrop" role="presentation">
       <div className="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-course-title">
         <p>REMOVE COURSE</p><h2 id="delete-course-title">删除“{course.title}”？</h2>
-        <div>当前版本还没有把 PDF 存进课程，因此这次只会删除课程书架中的记录。</div>
+        <div>课程中的文档记录、提取文字和总结也会从这个浏览器中删除。原始 PDF 从未被保存。</div>
         {errorMessage ? <span role="alert">{errorMessage}</span> : null}
         <footer><button type="button" onClick={onCancel} disabled={isDeleting}>保留课程</button><button className="confirm-delete" type="button" onClick={() => void remove()} disabled={isDeleting}>{isDeleting ? "正在删除" : "确认删除"}</button></footer>
       </div>
@@ -233,5 +216,5 @@ function DeleteCourseDialog({ course, onCancel, onDeleted }: { course: Course; o
 }
 
 function LibraryLoading() {
-  return <div className="library-loading" role="status"><i /><div><strong>正在打开你的课程书架</strong><span>Herbert 正在连接私人工作区</span></div></div>;
+  return <div className="library-loading" role="status"><i /><div><strong>正在打开你的课程书架</strong><span>Herbert 正在读取本机学习记录</span></div></div>;
 }

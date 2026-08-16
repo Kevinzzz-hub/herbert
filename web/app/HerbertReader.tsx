@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CourseDocuments, type DocumentShelfState } from "./CourseDocuments";
 import { DocumentQa } from "./DocumentQa";
 import { StudyLab } from "./StudyLab";
+import {
+  completeLocalDocument,
+  createPendingDocument,
+  deleteLocalDocument,
+  listLocalDocuments,
+  markLocalDocumentFailed,
+  markLocalDocumentPending,
+} from "@/lib/local-library";
 import type { TextPage } from "@/lib/herbert";
-import type { ApiErrorBody, SummaryPoint, SummaryResult } from "@/lib/types";
+import type { ApiErrorBody, CourseDocument, SummaryPoint, SummaryResult } from "@/lib/types";
 
 type ViewState = "idle" | "selected" | "loading" | "success" | "error";
 
@@ -16,10 +25,12 @@ const progressSteps = [
 ];
 
 export function HerbertReader({
+  courseId,
   courseName,
   onBackToCourses,
 }: {
-  courseName?: string;
+  courseId: string;
+  courseName: string;
   onBackToCourses?: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -30,6 +41,41 @@ export function HerbertReader({
   const [result, setResult] = useState<SummaryResult | null>(null);
   const [documentPages, setDocumentPages] = useState<TextPage[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
+  const [documents, setDocuments] = useState<CourseDocument[]>([]);
+  const [documentState, setDocumentState] = useState<DocumentShelfState>("loading");
+  const [documentError, setDocumentError] = useState("");
+  const [busyDocumentId, setBusyDocumentId] = useState<string | null>(null);
+  const [workingFileName, setWorkingFileName] = useState("PDF");
+
+  const loadDocuments = useCallback(async () => {
+    setDocumentState("loading");
+    setDocumentError("");
+    try {
+      setDocuments(await listLocalDocuments(courseId));
+      setDocumentState("ready");
+    } catch (error) {
+      setDocumentError(error instanceof Error ? error.message : "本机文档记录暂时无法读取。");
+      setDocumentState("error");
+    }
+  }, [courseId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    listLocalDocuments(courseId).then((savedDocuments) => {
+      if (cancelled) return;
+      setDocuments(savedDocuments);
+      setDocumentState("ready");
+    }).catch((error: unknown) => {
+      if (cancelled) return;
+      setDocumentError(error instanceof Error ? error.message : "本机文档记录暂时无法读取。");
+      setDocumentState("error");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
 
   useEffect(() => {
     if (view !== "loading") return;
@@ -68,12 +114,50 @@ export function HerbertReader({
     setDocumentPages([]);
     setErrorMessage("");
     setProgressStep(0);
+    setWorkingFileName("PDF");
     setView("idle");
+    void loadDocuments();
     if (inputRef.current) inputRef.current.value = "";
+  };
+
+  const generateSummary = async (document: CourseDocument) => {
+    setBusyDocumentId(document.id);
+    setWorkingFileName(document.fileName);
+    setView("loading");
+    setProgressStep(2);
+    setDocumentPages(document.pages);
+    try {
+      const response = await fetch("/api/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: document.fileName, pages: document.pages }),
+      });
+      const body = await response.json() as SummaryResult | ApiErrorBody;
+      if (!response.ok || "error" in body) {
+        throw new Error("error" in body ? body.error.message : "Herbert 暂时无法完成总结，请稍后重试。");
+      }
+      await completeLocalDocument(document.id, body);
+      setResult({ ...body, documentId: document.id });
+      await loadDocuments();
+      setView("success");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Herbert 暂时无法完成总结，请稍后重试。";
+      try {
+        await markLocalDocumentFailed(document.id, message);
+        await loadDocuments();
+      } catch {
+        // The original error remains the most useful message for the reader.
+      }
+      setErrorMessage(message);
+      setView("error");
+    } finally {
+      setBusyDocumentId(null);
+    }
   };
 
   const summarize = async () => {
     if (!file) return;
+    setWorkingFileName(file.name);
     setView("loading");
     setProgressStep(0);
     try {
@@ -81,20 +165,52 @@ export function HerbertReader({
       const pages = await extractPdf(file);
       setDocumentPages(pages);
       setProgressStep(2);
-      const response = await fetch("/api/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, pages }),
+      const document = await createPendingDocument({
+        courseId,
+        fileName: file.name,
+        fileSize: file.size,
+        pages,
+        model: "DeepSeek",
       });
-      const body = await response.json() as SummaryResult | ApiErrorBody;
-      if (!response.ok || "error" in body) {
-        throw new Error("error" in body ? body.error.message : "Herbert 暂时无法完成总结，请稍后重试。");
-      }
-      setResult(body);
-      setView("success");
+      setDocuments((current) => [document, ...current]);
+      setDocumentState("ready");
+      await generateSummary(document);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Herbert 暂时无法完成总结，请稍后重试。");
       setView("error");
+    }
+  };
+
+  const openDocument = (document: CourseDocument) => {
+    if (!document.summary || !document.summaryMeta) return;
+    setDocumentPages(document.pages);
+    setResult({ summary: document.summary, meta: document.summaryMeta, documentId: document.id });
+    setView("success");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const retryDocument = async (document: CourseDocument) => {
+    try {
+      const pending = await markLocalDocumentPending(document.id);
+      setDocuments((current) => current.map((item) => item.id === pending.id ? pending : item));
+      await generateSummary(pending);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "这份文档暂时无法继续总结。");
+      setView("error");
+    }
+  };
+
+  const removeDocument = async (document: CourseDocument) => {
+    if (!window.confirm(`删除“${document.fileName}”的本机记录、提取文字和总结吗？`)) return;
+    setBusyDocumentId(document.id);
+    try {
+      await deleteLocalDocument(document.id);
+      setDocuments((current) => current.filter((item) => item.id !== document.id));
+    } catch (error) {
+      setDocumentError(error instanceof Error ? error.message : "这份记录暂时无法删除。");
+      setDocumentState("error");
+    } finally {
+      setBusyDocumentId(null);
     }
   };
 
@@ -117,17 +233,28 @@ export function HerbertReader({
           <span className="brand-copy"><strong>HERBERT</strong><small>PDF READING ASSISTANT</small></span>
         </button>
         <div className="reader-header-actions">
-          {courseName && onBackToCourses ? <button type="button" onClick={onBackToCourses}>← 我的课程</button> : null}
-          <span className="privacy-note"><i aria-hidden="true" />原 PDF 留在浏览器，仅提取文字用于总结、问答与学习材料</span>
+          {onBackToCourses ? <button type="button" onClick={onBackToCourses}>← 我的课程</button> : null}
+          <span className="privacy-note"><i aria-hidden="true" />原 PDF 不保存，提取文字与总结仅存于本浏览器</span>
         </div>
       </header>
 
-      {courseName ? <div className="course-context"><span>CURRENT COURSE</span><strong>{courseName}</strong><small>V0.4.1 中 PDF 结果暂未保存到课程</small></div> : null}
+      <div className="course-context"><span>CURRENT COURSE</span><strong>{courseName}</strong><small>关机后仍保留 · 清除浏览器数据会删除</small></div>
 
       {view === "success" && result ? (
         <SummaryView result={result} pages={documentPages} onReset={reset} onDownload={downloadSummary} />
       ) : (
-        <section className="hero-section">
+        <>
+          <CourseDocuments
+            documents={documents}
+            state={documentState}
+            errorMessage={documentError}
+            busyDocumentId={busyDocumentId}
+            onOpen={openDocument}
+            onRetry={(document) => void retryDocument(document)}
+            onDelete={(document) => void removeDocument(document)}
+            onRefresh={() => void loadDocuments()}
+          />
+          <section className="hero-section course-reader-hero">
           <div className="hero-copy">
             <p className="eyebrow">YOUR QUIET READING DESK</p>
             <h1>读完一份 PDF，<br /><em>不必从头迷失。</em></h1>
@@ -148,7 +275,7 @@ export function HerbertReader({
               onChange={(event) => chooseFile(event.target.files?.[0])}
             />
             {view === "loading" ? (
-              <LoadingState fileName={file?.name ?? "PDF"} currentStep={progressStep} />
+              <LoadingState fileName={workingFileName} currentStep={progressStep} />
             ) : view === "error" ? (
               <ErrorState message={errorMessage} onRetry={reset} />
             ) : (
@@ -185,7 +312,8 @@ export function HerbertReader({
             )}
             <div className="panel-footnote"><span aria-hidden="true">◇</span>总结由 DeepSeek 生成，重要内容请结合页码核对</div>
           </div>
-        </section>
+          </section>
+        </>
       )}
 
       <footer className="site-footer"><span>HERBERT · V0.4</span><p>Named for a great American librarian.</p></footer>
@@ -240,8 +368,8 @@ function SummaryView({
   return (
     <article className="summary-page">
       <div className="summary-toolbar">
-        <div><p className="eyebrow">READING COMPLETE</p><h1>{meta.fileName}</h1><p>{meta.totalPages} 页 · {meta.chunkCount} 个阅读分块 · {meta.requestCount} 次 AI 请求</p></div>
-        <div className="toolbar-actions"><button type="button" onClick={onDownload}>下载总结</button><button className="solid" type="button" onClick={onReset}>总结另一份 PDF</button></div>
+        <div><p className="eyebrow">READING COMPLETE</p><h1>{meta.fileName}</h1><p>{meta.totalPages} 页 · {meta.chunkCount} 个阅读分块 · {meta.requestCount} 次 AI 请求{result.documentId ? " · 已保存到本机课程" : ""}</p></div>
+        <div className="toolbar-actions"><button type="button" onClick={onDownload}>下载总结</button><button className="solid" type="button" onClick={onReset}>返回课程资料</button></div>
       </div>
 
       <section className="overview-card"><span>一句话概括</span><p>{summary.overview}</p></section>

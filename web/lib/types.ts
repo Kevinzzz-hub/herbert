@@ -22,6 +22,7 @@ export interface SummaryMeta {
 export interface SummaryResult {
   summary: DocumentSummary;
   meta: SummaryMeta;
+  documentId?: string;
 }
 
 export interface DocumentQuestionAnswer {
@@ -81,6 +82,7 @@ export interface Course {
   id: string;
   title: string;
   description: string;
+  documentCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -91,4 +93,22 @@ export interface CourseListResult {
 
 export interface CourseResult {
   course: Course;
+}
+
+export type CourseDocumentStatus = "pending" | "complete" | "failed";
+
+export interface CourseDocument {
+  id: string;
+  courseId: string;
+  fileName: string;
+  fileSize: number;
+  pageCount: number;
+  pages: import("./herbert").TextPage[];
+  summary: DocumentSummary | null;
+  summaryMeta: SummaryMeta | null;
+  model: string;
+  status: CourseDocumentStatus;
+  errorMessage: string;
+  createdAt: string;
+  updatedAt: string;
 }

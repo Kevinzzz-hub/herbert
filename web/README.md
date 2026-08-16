@@ -33,11 +33,15 @@ commit them to Git.
 3. DeepSeek summarizes the chunks and synthesizes a final structured result.
 4. Herbert validates the JSON and page citations before displaying the result.
 5. Follow-up questions retrieve relevant pages and return grounded, page-cited answers.
-6. A study request turns summary-backed pages into flashcards and a five-question quiz.
+6. The browser saves courses, extracted text, and completed summaries in IndexedDB.
+7. A study request turns summary-backed pages into flashcards and a five-question quiz.
 
-The original PDF remains in the browser. Only extracted text is sent for the
-summary, follow-up answers, and study materials. Herbert does not currently provide accounts or
-saved reading history.
+The original PDF is never saved. Extracted text is sent to the server only when
+DeepSeek needs it for a summary, follow-up answer, or study pack. Courses,
+extracted pages, and summaries are stored in that reader's browser with
+IndexedDB, so Herbert needs no account or hosted course database. Records remain
+after a restart but are tied to the same browser and origin; clearing site data
+removes them.
 
 ## Verification
 
@@ -58,3 +62,6 @@ the retrieval flow, validation rules, and acceptance checklist.
 
 See [the study module guide](../docs/STUDY_MODULE_GUIDE.zh-CN.md) for the
 flashcard and quiz data flow, validation rules, and acceptance checklist.
+
+See [the local library guide](../docs/LOCAL_LIBRARY_GUIDE.zh-CN.md) for the
+free-tier storage decision, IndexedDB data flow, limitations, and acceptance checklist.
