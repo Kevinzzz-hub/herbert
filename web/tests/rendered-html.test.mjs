@@ -25,6 +25,7 @@ test("server-renders the Herbert login gate", async () => {
   assert.match(html, /<title>Herbert — PDF 阅读助手<\/title>/i);
   assert.match(html, /正在确认登录状态/);
   assert.match(html, /Herbert 正在准备你的私人学习空间/);
+  assert.match(html, /HERBERT · (?:<!-- -->)?V0\.6/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });
 
@@ -235,7 +236,7 @@ test("adds interactive flashcards and a scored quiz without exposing secrets", a
     readFile(new URL("../app/api/study/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/herbert.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(reader, /<StudyLab fileName=\{meta\.fileName\} pages=\{pages\} summary=\{summary\}/);
+  assert.match(reader, /<StudyLab[\s\S]*documentId=\{result\.documentId\}[\s\S]*summary=\{summary\}/);
   assert.match(studyLab, /authenticatedFetch\("\/api\/study"/);
   assert.match(studyLab, /setIsRevealed\(\(current\) => !current\)/);
   assert.match(studyLab, /correctCount/);
@@ -244,6 +245,45 @@ test("adds interactive flashcards and a scored quiz without exposing secrets", a
   assert.match(studyRoute, /validateStudySummary\(payload\.summary, allowedPages\)/);
   assert.match(server, /correct_option_index/);
   assert.match(server, /每题必须恰好有 4 个互不重复的选项和唯一正确答案/);
+});
+
+test("persists generated study materials and completed quiz attempts locally", async () => {
+  const [studyLab, localLibrary, types, courseDocuments] = await Promise.all([
+    readFile(new URL("../app/StudyLab.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/local-library.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/CourseDocuments.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(types, /interface DocumentStudyRecord/);
+  assert.match(types, /quizAttempts: QuizAttempt\[\]/);
+  assert.match(localLibrary, /export async function saveLocalStudyPack/);
+  assert.match(localLibrary, /export async function saveLocalQuizAttempt/);
+  assert.match(localLibrary, /\.slice\(-20\)/);
+  assert.match(studyLab, /initialStudyRecord\?\.studyPack/);
+  assert.match(studyLab, /saveLocalStudyPack\(ownerId, documentId, body\)/);
+  assert.match(studyLab, /saveLocalQuizAttempt\(ownerId, documentId, correctCount, totalCount\)/);
+  assert.match(courseDocuments, /复习材料已保存/);
+  assert.match(courseDocuments, /latestAttempt\.correctCount/);
+});
+
+test("exports and safely imports versioned local course backups", async () => {
+  const [courseLibrary, courseBackup, localLibrary] = await Promise.all([
+    readFile(new URL("../app/CourseLibrary.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/course-backup.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/local-library.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(courseBackup, /COURSE_BACKUP_FORMAT = "herbert-course-backup"/);
+  assert.match(courseBackup, /COURSE_BACKUP_VERSION = 1/);
+  assert.match(courseBackup, /MAX_COURSE_BACKUP_BYTES = 25 \* 1024 \* 1024/);
+  assert.match(courseBackup, /export function parseCourseBackup/);
+  assert.match(courseBackup, /备份内容引用了不存在的 PDF 页码/);
+  assert.doesNotMatch(courseBackup, /apiKey|keyHint|accountEmail/);
+  assert.match(localLibrary, /export async function createLocalCourseBackup/);
+  assert.match(localLibrary, /export async function importLocalCourseBackup/);
+  assert.match(localLibrary, /database\.transaction\(\[COURSE_STORE, DOCUMENT_STORE\], "readwrite"\)/);
+  assert.match(courseLibrary, /导入课程备份/);
+  assert.match(courseLibrary, /courseBackupFileName\(course\.title\)/);
+  assert.match(courseLibrary, /parseCourseBackup\(await file\.text\(\)\)/);
 });
 
 test("uses same-browser email OTP login and a server-only Supabase Vault", async () => {
@@ -259,6 +299,10 @@ test("uses same-browser email OTP login and a server-only Supabase Vault", async
   assert.match(authGate, /verifyOtp/);
   assert.match(authGate, /autoComplete="one-time-code"/);
   assert.match(authGate, /type: "email"/);
+  assert.match(authGate, /const EMAIL_OTP_LENGTH = 8/);
+  assert.match(authGate, /token\.length !== EMAIL_OTP_LENGTH/);
+  assert.match(authGate, /maxLength=\{EMAIL_OTP_LENGTH\}/);
+  assert.doesNotMatch(authGate, /6 位验证码/);
   assert.doesNotMatch(authGate, /emailRedirectTo/);
   assert.match(authGate, /authenticatedFetch\("\/api\/account\/api-key"/);
   assert.doesNotMatch(authGate, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
