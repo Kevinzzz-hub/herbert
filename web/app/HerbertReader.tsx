@@ -14,7 +14,8 @@ import {
   markLocalDocumentPending,
 } from "@/lib/local-library";
 import type { TextPage } from "@/lib/herbert";
-import type { ApiErrorBody, CourseDocument, SummaryPoint, SummaryResult } from "@/lib/types";
+import type { ApiErrorBody, CourseDocument, DocumentStudyRecord, SummaryPoint, SummaryResult } from "@/lib/types";
+import { HERBERT_VERSION } from "@/lib/version";
 
 type ViewState = "idle" | "selected" | "loading" | "success" | "error";
 
@@ -42,6 +43,7 @@ export function HerbertReader({
   const [isDragging, setIsDragging] = useState(false);
   const [progressStep, setProgressStep] = useState(0);
   const [result, setResult] = useState<SummaryResult | null>(null);
+  const [activeStudyRecord, setActiveStudyRecord] = useState<DocumentStudyRecord | null>(null);
   const [documentPages, setDocumentPages] = useState<TextPage[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [documents, setDocuments] = useState<CourseDocument[]>([]);
@@ -93,6 +95,7 @@ export function HerbertReader({
   const chooseFile = (candidate: File | undefined) => {
     if (!candidate) return;
     setResult(null);
+    setActiveStudyRecord(null);
     setDocumentPages([]);
     setErrorMessage("");
     if (!candidate.name.toLowerCase().endsWith(".pdf")) {
@@ -114,6 +117,7 @@ export function HerbertReader({
   const reset = () => {
     setFile(null);
     setResult(null);
+    setActiveStudyRecord(null);
     setDocumentPages([]);
     setErrorMessage("");
     setProgressStep(0);
@@ -139,8 +143,9 @@ export function HerbertReader({
       if (!response.ok || "error" in body) {
         throw new Error("error" in body ? body.error.message : "Herbert 暂时无法完成总结，请稍后重试。");
       }
-      await completeLocalDocument(ownerId, document.id, body);
+      const completed = await completeLocalDocument(ownerId, document.id, body);
       setResult({ ...body, documentId: document.id });
+      setActiveStudyRecord(completed.studyRecord ?? null);
       await loadDocuments();
       setView("success");
     } catch (error) {
@@ -189,6 +194,7 @@ export function HerbertReader({
     if (!document.summary || !document.summaryMeta) return;
     setDocumentPages(document.pages);
     setResult({ summary: document.summary, meta: document.summaryMeta, documentId: document.id });
+    setActiveStudyRecord(document.studyRecord ?? null);
     setView("success");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -245,7 +251,15 @@ export function HerbertReader({
       <div className="course-context"><span>CURRENT COURSE</span><strong>{courseName}</strong><small>关机后仍保留 · 清除浏览器数据会删除</small></div>
 
       {view === "success" && result ? (
-        <SummaryView result={result} pages={documentPages} onReset={reset} onDownload={downloadSummary} />
+        <SummaryView
+          result={result}
+          pages={documentPages}
+          ownerId={ownerId}
+          initialStudyRecord={activeStudyRecord}
+          onStudyRecordChange={setActiveStudyRecord}
+          onReset={reset}
+          onDownload={downloadSummary}
+        />
       ) : (
         <>
           <CourseDocuments
@@ -320,7 +334,7 @@ export function HerbertReader({
         </>
       )}
 
-      <footer className="site-footer"><span>HERBERT · V0.4</span><p>Named for a great American librarian.</p></footer>
+      <footer className="site-footer"><span>HERBERT · {HERBERT_VERSION}</span><p>Named for a great American librarian.</p></footer>
     </main>
   );
 }
@@ -360,11 +374,17 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 function SummaryView({
   result,
   pages,
+  ownerId,
+  initialStudyRecord,
+  onStudyRecordChange,
   onReset,
   onDownload,
 }: {
   result: SummaryResult;
   pages: TextPage[];
+  ownerId: string;
+  initialStudyRecord: DocumentStudyRecord | null;
+  onStudyRecordChange: (record: DocumentStudyRecord) => void;
   onReset: () => void;
   onDownload: () => void;
 }) {
@@ -398,7 +418,17 @@ function SummaryView({
 
       <DocumentQa fileName={meta.fileName} pages={pages} />
 
-      <StudyLab fileName={meta.fileName} pages={pages} summary={summary} />
+      {result.documentId ? (
+        <StudyLab
+          ownerId={ownerId}
+          documentId={result.documentId}
+          fileName={meta.fileName}
+          pages={pages}
+          summary={summary}
+          initialStudyRecord={initialStudyRecord}
+          onStudyRecordChange={onStudyRecordChange}
+        />
+      ) : null}
     </article>
   );
 }

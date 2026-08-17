@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { saveLocalQuizAttempt, saveLocalStudyPack } from "@/lib/local-library";
 import type { TextPage } from "@/lib/herbert";
 import type {
   ApiErrorBody,
+  DocumentStudyRecord,
   DocumentSummary,
   StudyPack,
   StudyPackResult,
@@ -13,19 +15,29 @@ import type {
 type StudyMode = "cards" | "quiz";
 
 export function StudyLab({
+  ownerId,
+  documentId,
   fileName,
   pages,
   summary,
+  initialStudyRecord,
+  onStudyRecordChange,
 }: {
+  ownerId: string;
+  documentId: string;
   fileName: string;
   pages: TextPage[];
   summary: DocumentSummary;
+  initialStudyRecord: DocumentStudyRecord | null;
+  onStudyRecordChange: (record: DocumentStudyRecord) => void;
 }) {
-  const [studyPack, setStudyPack] = useState<StudyPack | null>(null);
-  const [consideredPages, setConsideredPages] = useState<number[]>([]);
+  const [studyRecord, setStudyRecord] = useState<DocumentStudyRecord | null>(initialStudyRecord);
+  const [studyPack, setStudyPack] = useState<StudyPack | null>(() => initialStudyRecord?.studyPack ?? null);
+  const [consideredPages, setConsideredPages] = useState<number[]>(() => initialStudyRecord?.consideredPages ?? []);
   const [mode, setMode] = useState<StudyMode>("cards");
   const [isGenerating, setIsGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [saveMessage, setSaveMessage] = useState(initialStudyRecord ? "已从本机恢复学习材料" : "");
 
   const generate = async () => {
     if (isGenerating) return;
@@ -44,12 +56,38 @@ export function StudyLab({
       setStudyPack(body.studyPack);
       setConsideredPages(body.meta.consideredPages);
       setMode("cards");
+      try {
+        const updated = await saveLocalStudyPack(ownerId, documentId, body);
+        const record = updated.studyRecord ?? null;
+        setStudyRecord(record);
+        if (record) onStudyRecordChange(record);
+        setSaveMessage("学习材料已保存到本机，下次打开无需重新生成");
+      } catch {
+        setSaveMessage("");
+        setErrorMessage("学习材料已经生成，但暂时无法保存；离开页面前仍可继续使用。");
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Herbert 暂时无法生成学习材料。");
     } finally {
       setIsGenerating(false);
     }
   };
+
+  const recordQuizAttempt = async (correctCount: number, totalCount: number) => {
+    setSaveMessage("正在保存本次成绩…");
+    try {
+      const updated = await saveLocalQuizAttempt(ownerId, documentId, correctCount, totalCount);
+      const record = updated.studyRecord ?? null;
+      setStudyRecord(record);
+      if (record) onStudyRecordChange(record);
+      setSaveMessage("本次成绩已保存到课程记录");
+    } catch (error) {
+      setSaveMessage("");
+      setErrorMessage(error instanceof Error ? error.message : "本次测验成绩暂时无法保存。");
+    }
+  };
+
+  const latestAttempt = studyRecord?.quizAttempts.at(-1);
 
   return (
     <section className="study-section" aria-labelledby="study-title">
@@ -64,7 +102,7 @@ export function StudyLab({
             <p className="study-kicker">ACTIVE RECALL</p>
             <h3>知识卡片 + 5 道小测验</h3>
             <p>Herbert 会从总结引用过的原文页面中制作学习材料。先主动回忆，再查看答案，比反复阅读更能暴露理解盲区。</p>
-            <small>相关页文字和当前总结会发送给 DeepSeek；生成结果目前只保留在本次页面中。</small>
+            <small>相关页文字和当前总结会发送给 DeepSeek；生成结果会保存在当前浏览器的课程记录中。</small>
           </div>
           <button type="button" onClick={() => void generate()} disabled={isGenerating}>
             {isGenerating ? "正在制作学习材料" : "生成学习材料"}<span aria-hidden="true">→</span>
@@ -92,13 +130,20 @@ export function StudyLab({
             </button>
             <small>取材页：第{consideredPages.join("、")}页</small>
           </div>
+          <div className="study-record-summary">
+            <span>{studyRecord ? `已复习 ${studyRecord.quizAttempts.length} 次` : "学习材料尚未保存"}</span>
+            {latestAttempt ? <span>最近成绩 {latestAttempt.correctCount} / {latestAttempt.totalCount}</span> : <span>完成测验后会保存成绩</span>}
+            {studyRecord ? <span>上次学习 {formatStudyDate(studyRecord.lastStudiedAt)}</span> : null}
+          </div>
           {mode === "cards" ? (
             <FlashcardDeck cards={studyPack.cards} />
           ) : (
-            <Quiz questions={studyPack.quiz} />
+            <Quiz questions={studyPack.quiz} onComplete={(correctCount, totalCount) => void recordQuizAttempt(correctCount, totalCount)} />
           )}
         </div>
       )}
+      {saveMessage ? <p className="study-save-message" role="status">{saveMessage}</p> : null}
+      {errorMessage && studyPack ? <p className="study-error" role="alert">{errorMessage}</p> : null}
     </section>
   );
 }
@@ -134,7 +179,7 @@ function FlashcardDeck({ cards }: { cards: StudyPack["cards"] }) {
   );
 }
 
-function Quiz({ questions }: { questions: StudyPack["quiz"] }) {
+function Quiz({ questions, onComplete }: { questions: StudyPack["quiz"]; onComplete: (correctCount: number, totalCount: number) => void }) {
   const [answers, setAnswers] = useState<Array<number | null>>(() => questions.map(() => null));
   const [questionIndex, setQuestionIndex] = useState(0);
   const question = questions[questionIndex];
@@ -148,9 +193,17 @@ function Quiz({ questions }: { questions: StudyPack["quiz"] }) {
 
   const chooseOption = (optionIndex: number) => {
     if (selectedOption !== null) return;
-    setAnswers((current) => current.map((answer, index) => (
+    const nextAnswers = answers.map((answer, index) => (
       index === questionIndex ? optionIndex : answer
-    )));
+    ));
+    setAnswers(nextAnswers);
+    if (nextAnswers.every((answer) => answer !== null)) {
+      const nextCorrectCount = nextAnswers.reduce<number>(
+        (total, answer, index) => total + (answer === questions[index].correctOptionIndex ? 1 : 0),
+        0,
+      );
+      onComplete(nextCorrectCount, questions.length);
+    }
   };
 
   const restart = () => {
@@ -208,4 +261,8 @@ function Quiz({ questions }: { questions: StudyPack["quiz"] }) {
       ) : null}
     </div>
   );
+}
+
+function formatStudyDate(value: string): string {
+  return new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }

@@ -47,6 +47,7 @@ export function CourseDocuments({
         <div className="document-record-grid">
           {documents.map((document, index) => {
             const isBusy = busyDocumentId === document.id;
+            const latestAttempt = document.studyRecord?.quizAttempts.at(-1);
             return (
               <article className={`document-record is-${document.status}`} key={document.id}>
                 <div className="document-record-topline">
@@ -59,6 +60,8 @@ export function CourseDocuments({
                   <span>{document.pageCount} 页</span>
                   <span>{formatFileSize(document.fileSize)}</span>
                   <span>{formatDate(document.updatedAt)}</span>
+                  {document.studyRecord ? <span>复习材料已保存</span> : null}
+                  {latestAttempt ? <span>最近 {latestAttempt.correctCount}/{latestAttempt.totalCount}</span> : null}
                 </div>
                 <div className="document-record-actions">
                   {document.status === "complete" ? (

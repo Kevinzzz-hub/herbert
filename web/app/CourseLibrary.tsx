@@ -1,13 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   claimLegacyLocalRecords,
   createLocalCourse,
+  createLocalCourseBackup,
   deleteLocalCourse,
+  importLocalCourseBackup,
   listLocalCourses,
 } from "@/lib/local-library";
+import {
+  courseBackupFileName,
+  MAX_COURSE_BACKUP_BYTES,
+  parseCourseBackup,
+  serializeCourseBackup,
+} from "@/lib/course-backup";
 import type { Course } from "@/lib/types";
+import { HERBERT_VERSION } from "@/lib/version";
 import { HerbertReader } from "./HerbertReader";
 
 type LibraryState = "loading" | "ready" | "error";
@@ -25,12 +34,17 @@ export function CourseLibrary({
   onManageKey: () => void;
   onSignOut: () => void;
 }) {
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<LibraryState>("loading");
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [backupMessage, setBackupMessage] = useState("");
+  const [backupError, setBackupError] = useState("");
+  const [busyCourseId, setBusyCourseId] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   const loadCourses = async () => {
     setState("loading");
@@ -69,6 +83,46 @@ export function CourseLibrary({
     };
   }, [ownerId]);
 
+  const exportCourse = async (course: Course) => {
+    if (busyCourseId) return;
+    setBusyCourseId(course.id);
+    setBackupMessage("");
+    setBackupError("");
+    try {
+      const backup = await createLocalCourseBackup(ownerId, course.id);
+      const url = URL.createObjectURL(new Blob([serializeCourseBackup(backup)], { type: "application/json;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = courseBackupFileName(course.title);
+      link.click();
+      URL.revokeObjectURL(url);
+      setBackupMessage(`“${course.title}”已经导出。请妥善保存下载的备份文件。`);
+    } catch (error) {
+      setBackupError(error instanceof Error ? error.message : "课程暂时无法导出。");
+    } finally {
+      setBusyCourseId(null);
+    }
+  };
+
+  const importCourse = async (file: File | undefined) => {
+    if (!file || isImporting) return;
+    setIsImporting(true);
+    setBackupMessage("");
+    setBackupError("");
+    try {
+      if (file.size > MAX_COURSE_BACKUP_BYTES) throw new Error("备份文件超过 25 MB，当前版本暂时无法导入。");
+      const backup = parseCourseBackup(await file.text());
+      const course = await importLocalCourseBackup(ownerId, backup);
+      setCourses((current) => [course, ...current]);
+      setState("ready");
+      setBackupMessage(`已导入“${course.title}”，包含 ${course.documentCount} 份 PDF 记录。`);
+    } catch (error) {
+      setBackupError(error instanceof Error ? error.message : "课程备份暂时无法导入。");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   if (selectedCourse) {
     return (
       <HerbertReader
@@ -93,10 +147,30 @@ export function CourseLibrary({
             <h1>把每门课，<br /><em>放进自己的书架。</em></h1>
             <p>课程会把同一主题的 PDF、总结和复习材料组织在一起。学习记录保存在当前浏览器，并按登录账号隔离。</p>
           </div>
-          <button className="primary-button library-create-button" type="button" onClick={() => setIsCreating(true)}>
-            新建课程 <span aria-hidden="true">＋</span>
-          </button>
+          <div className="library-primary-actions">
+            <button className="library-import-button" type="button" onClick={() => importInputRef.current?.click()} disabled={isImporting}>
+              {isImporting ? "正在导入" : "导入课程备份"}
+            </button>
+            <button className="primary-button library-create-button" type="button" onClick={() => setIsCreating(true)}>
+              新建课程 <span aria-hidden="true">＋</span>
+            </button>
+          </div>
+          <input
+            ref={importInputRef}
+            className="visually-hidden"
+            type="file"
+            accept="application/json,.json"
+            aria-label="选择 Herbert 课程备份文件"
+            onChange={(event) => {
+              const selectedFile = event.currentTarget.files?.[0];
+              event.currentTarget.value = "";
+              void importCourse(selectedFile);
+            }}
+          />
         </div>
+
+        {backupMessage ? <p className="backup-notice" role="status">{backupMessage}</p> : null}
+        {backupError ? <p className="backup-notice is-error" role="alert">{backupError}</p> : null}
 
         {isCreating ? (
           <CourseForm
@@ -137,8 +211,13 @@ export function CourseLibrary({
                   <div className="course-description">{course.description || "还没有课程说明。进入后可以开始阅读第一份 PDF。"}</div>
                   <div className="course-card-meta"><span>{course.documentCount} 份 PDF</span><span>本机保存</span></div>
                   <div className="course-card-actions">
-                    <button className="open-course" type="button" onClick={() => setSelectedCourse(course)}>进入课程 <span>→</span></button>
-                    <button className="delete-course" type="button" onClick={() => setCourseToDelete(course)} aria-label={`删除课程 ${course.title}`}>删除</button>
+                    <button className="open-course" type="button" onClick={() => setSelectedCourse(course)} disabled={busyCourseId === course.id}>进入课程 <span>→</span></button>
+                    <div className="course-card-secondary-actions">
+                      <button className="export-course" type="button" onClick={() => void exportCourse(course)} disabled={busyCourseId !== null} aria-label={`导出课程 ${course.title}`}>
+                        {busyCourseId === course.id ? "导出中" : "备份"}
+                      </button>
+                      <button className="delete-course" type="button" onClick={() => setCourseToDelete(course)} disabled={busyCourseId === course.id} aria-label={`删除课程 ${course.title}`}>删除</button>
+                    </div>
                   </div>
                 </article>
               ))}
@@ -146,7 +225,7 @@ export function CourseLibrary({
           </section>
         ) : null}
       </section>
-      <footer className="site-footer"><span>HERBERT · V0.5</span><p>One shelf for every course.</p></footer>
+      <footer className="site-footer"><span>HERBERT · {HERBERT_VERSION}</span><p>One shelf for every course.</p></footer>
       {courseToDelete ? (
         <DeleteCourseDialog
           ownerId={ownerId}

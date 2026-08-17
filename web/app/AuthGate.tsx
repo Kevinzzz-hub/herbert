@@ -5,6 +5,7 @@ import type { Session } from "@supabase/supabase-js";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { getSupabaseBrowserClient } from "@/lib/supabase-client";
 import type { ApiErrorBody } from "@/lib/types";
+import { HERBERT_VERSION } from "@/lib/version";
 import { CourseLibrary } from "./CourseLibrary";
 
 interface ApiKeyStatus {
@@ -14,6 +15,8 @@ interface ApiKeyStatus {
 }
 
 type GateState = "loading-auth" | "signed-out" | "loading-key" | "needs-key" | "ready" | "error";
+
+const EMAIL_OTP_LENGTH = 8;
 
 export function AuthGate() {
   const [session, setSession] = useState<Session | null>(null);
@@ -182,7 +185,7 @@ function EmailOtpSignIn() {
 
   const verifyCode = async () => {
     const token = otp.replace(/\D/g, "");
-    if (token.length !== 6 || isVerifying) return;
+    if (token.length !== EMAIL_OTP_LENGTH || isVerifying) return;
     setIsVerifying(true);
     setErrorMessage("");
     const { data, error } = await getSupabaseBrowserClient().auth.verifyOtp({
@@ -208,30 +211,30 @@ function EmailOtpSignIn() {
       <div className="auth-card">
         <p className="account-kicker">YOUR PRIVATE STUDY SPACE</p>
         <h1>登录 Herbert，<br /><em>使用自己的 AI。</em></h1>
-        <p className="auth-description">输入邮箱获取 6 位验证码，然后留在这个页面完成登录。第一次登录会自动建立账号，不需要记住新密码。</p>
+        <p className="auth-description">输入邮箱获取 {EMAIL_OTP_LENGTH} 位验证码，然后留在这个页面完成登录。第一次登录会自动建立账号，不需要记住新密码。</p>
         {codeSent ? (
           <>
             <div className="mail-sent" role="status">
-              <span>6</span><div><strong>验证码已经发送</strong><p>请查看 {email.trim()} 的邮件，并把 6 位数字输入下方。不要点击旧的登录链接。</p></div>
+              <span>{EMAIL_OTP_LENGTH}</span><div><strong>验证码已经发送</strong><p>请查看 {email.trim()} 的邮件，并把 {EMAIL_OTP_LENGTH} 位数字输入下方。不要点击旧的登录链接。</p></div>
             </div>
             <form className="otp-form" onSubmit={(event) => { event.preventDefault(); void verifyCode(); }}>
-              <label htmlFor="account-otp">6 位验证码</label>
+              <label htmlFor="account-otp">{EMAIL_OTP_LENGTH} 位验证码</label>
               <input
                 id="account-otp"
                 className="otp-input"
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                pattern="[0-9]{6}"
-                maxLength={6}
+                pattern={`[0-9]{${EMAIL_OTP_LENGTH}}`}
+                maxLength={EMAIL_OTP_LENGTH}
                 required
                 value={otp}
-                onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="000000"
+                onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, EMAIL_OTP_LENGTH))}
+                placeholder={"0".repeat(EMAIL_OTP_LENGTH)}
                 aria-describedby="otp-help"
               />
               <small id="otp-help">验证码默认 1 小时内有效；同一个验证码只能使用一次。</small>
-              <button type="submit" disabled={otp.length !== 6 || isVerifying}>{isVerifying ? "正在验证" : "验证并登录"}<span>→</span></button>
+              <button type="submit" disabled={otp.length !== EMAIL_OTP_LENGTH || isVerifying}>{isVerifying ? "正在验证" : "验证并登录"}<span>→</span></button>
             </form>
             <div className="auth-secondary-actions">
               <button type="button" onClick={changeEmail}>换一个邮箱</button>
@@ -242,7 +245,7 @@ function EmailOtpSignIn() {
           <form onSubmit={(event) => { event.preventDefault(); void sendCode(); }}>
             <label htmlFor="account-email">邮箱地址</label>
             <input id="account-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" />
-            <button type="submit" disabled={!email.trim() || isSending}>{isSending ? "正在发送" : "发送 6 位验证码"}<span>→</span></button>
+            <button type="submit" disabled={!email.trim() || isSending}>{isSending ? "正在发送" : `发送 ${EMAIL_OTP_LENGTH} 位验证码`}<span>→</span></button>
           </form>
         )}
         {errorMessage ? <p className="account-error" role="alert">{errorMessage}</p> : null}
@@ -357,7 +360,7 @@ function AccountFrame({ children }: { children: React.ReactNode }) {
     <main className="account-shell">
       <header className="account-header"><div className="brand"><span className="brand-mark" aria-hidden="true"><span /></span><span className="brand-copy"><strong>HERBERT</strong><small>PRIVATE AI READING</small></span></div><span>YOUR KEY · YOUR USAGE · YOUR LIBRARY</span></header>
       <section className="account-page">{children}</section>
-      <footer className="site-footer"><span>HERBERT · V0.5</span><p>Bring your own intelligence.</p></footer>
+      <footer className="site-footer"><span>HERBERT · {HERBERT_VERSION}</span><p>Bring your own intelligence.</p></footer>
     </main>
   );
 }
