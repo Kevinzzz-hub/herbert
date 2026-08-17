@@ -71,6 +71,20 @@ export interface StudyPackResult {
   };
 }
 
+export interface QuizAttempt {
+  correctCount: number;
+  totalCount: number;
+  completedAt: string;
+}
+
+export interface DocumentStudyRecord {
+  studyPack: StudyPack;
+  consideredPages: number[];
+  generatedAt: string;
+  lastStudiedAt: string;
+  quizAttempts: QuizAttempt[];
+}
+
 export interface ApiErrorBody {
   error: {
     code: string;
@@ -108,6 +122,7 @@ export interface CourseDocument {
   pages: import("./herbert").TextPage[];
   summary: DocumentSummary | null;
   summaryMeta: SummaryMeta | null;
+  studyRecord?: DocumentStudyRecord | null;
   model: string;
   status: CourseDocumentStatus;
   errorMessage: string;

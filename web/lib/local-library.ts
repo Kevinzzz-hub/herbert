@@ -1,5 +1,6 @@
-import type { Course, CourseDocument, SummaryResult } from "./types";
+import type { Course, CourseDocument, StudyPackResult, SummaryResult } from "./types";
 import type { TextPage } from "./herbert";
+import { createCourseBackup, type CourseBackupV1 } from "./course-backup";
 
 const DATABASE_NAME = "herbert-learning-library";
 const DATABASE_VERSION = 2;
@@ -46,6 +47,50 @@ export async function listLocalCourses(ownerId: string): Promise<Course[]> {
   return courses
     .map((course) => ({ ...course, documentCount: counts.get(course.id) ?? 0 }))
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+export async function createLocalCourseBackup(ownerId: string, courseId: string): Promise<CourseBackupV1> {
+  const database = await openDatabase();
+  const transaction = database.transaction([COURSE_STORE, DOCUMENT_STORE], "readonly");
+  const completion = transactionComplete(transaction);
+  const [course, documents] = await Promise.all([
+    requestResult<StoredCourse | undefined>(transaction.objectStore(COURSE_STORE).get(courseId)),
+    requestResult<CourseDocument[]>(
+      transaction.objectStore(DOCUMENT_STORE).index(OWNER_COURSE_INDEX).getAll(IDBKeyRange.only([ownerId, courseId])),
+    ),
+  ]);
+  await completion;
+  database.close();
+  if (!course || course.ownerId !== ownerId) throw new LocalLibraryError("没有找到需要备份的课程。");
+  return createCourseBackup({ ...course, documentCount: documents.length }, documents);
+}
+
+export async function importLocalCourseBackup(ownerId: string, backup: CourseBackupV1): Promise<Course> {
+  const timestamp = new Date().toISOString();
+  const course: Course = {
+    id: crypto.randomUUID(),
+    ownerId,
+    title: backup.course.title,
+    description: backup.course.description,
+    documentCount: backup.documents.length,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  const documents: CourseDocument[] = backup.documents.map((document) => ({
+    ...document,
+    id: crypto.randomUUID(),
+    ownerId,
+    courseId: course.id,
+    studyRecord: document.studyRecord ?? null,
+  }));
+  const database = await openDatabase();
+  const transaction = database.transaction([COURSE_STORE, DOCUMENT_STORE], "readwrite");
+  transaction.objectStore(COURSE_STORE).put(stripDocumentCount(course));
+  const documentStore = transaction.objectStore(DOCUMENT_STORE);
+  documents.forEach((document) => documentStore.put(document));
+  await transactionComplete(transaction);
+  database.close();
+  return course;
 }
 
 export async function createLocalCourse(input: { ownerId: string; title: string; description: string }): Promise<Course> {
@@ -135,6 +180,7 @@ export async function createPendingDocument(input: {
     pages: input.pages,
     summary: null,
     summaryMeta: null,
+    studyRecord: null,
     model: input.model,
     status: "pending",
     errorMessage: "",
@@ -183,6 +229,55 @@ export async function markLocalDocumentPending(ownerId: string, documentId: stri
   };
   await putDocument(ownerId, pending);
   return pending;
+}
+
+export async function saveLocalStudyPack(
+  ownerId: string,
+  documentId: string,
+  result: StudyPackResult,
+): Promise<CourseDocument> {
+  const document = await requireDocument(ownerId, documentId);
+  const timestamp = new Date().toISOString();
+  const updated: CourseDocument = {
+    ...document,
+    studyRecord: {
+      studyPack: result.studyPack,
+      consideredPages: result.meta.consideredPages,
+      generatedAt: timestamp,
+      lastStudiedAt: timestamp,
+      quizAttempts: [],
+    },
+    updatedAt: timestamp,
+  };
+  await putDocument(ownerId, updated);
+  return updated;
+}
+
+export async function saveLocalQuizAttempt(
+  ownerId: string,
+  documentId: string,
+  correctCount: number,
+  totalCount: number,
+): Promise<CourseDocument> {
+  const document = await requireDocument(ownerId, documentId);
+  if (!document.studyRecord || totalCount < 1 || correctCount < 0 || correctCount > totalCount) {
+    throw new LocalLibraryError("这次测验成绩无法保存，请重新打开学习材料后再试。");
+  }
+  const timestamp = new Date().toISOString();
+  const updated: CourseDocument = {
+    ...document,
+    studyRecord: {
+      ...document.studyRecord,
+      lastStudiedAt: timestamp,
+      quizAttempts: [
+        ...document.studyRecord.quizAttempts,
+        { correctCount, totalCount, completedAt: timestamp },
+      ].slice(-20),
+    },
+    updatedAt: timestamp,
+  };
+  await putDocument(ownerId, updated);
+  return updated;
 }
 
 export async function deleteLocalDocument(ownerId: string, documentId: string): Promise<void> {
