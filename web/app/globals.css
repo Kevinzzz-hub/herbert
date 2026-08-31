@@ -228,6 +228,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .drop-zone:fo
 .notice-card ul { margin: 0; padding-left: 18px; color: #5e553f; font-size: 12px; line-height: 1.8; }
 
 .qa-section { margin-top: 58px; padding: 58px 0 0; border-top: 1px solid var(--line); }
+.course-qa-section { position: relative; z-index: 1; width: min(1160px, calc(100% - 64px)); margin: 0 auto; padding: 54px 0 58px; border-top: 0; border-bottom: 1px solid var(--line); }
+.course-qa-section .qa-layout { grid-template-columns: 300px minmax(0, 1fr); }
+.course-search-status { display: flex; align-items: baseline; gap: 9px; margin-top: 20px; padding: 13px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.course-search-status strong { color: var(--gold); font-family: var(--serif); font-size: 25px; font-weight: 500; }
+.course-search-status span { color: var(--ink-soft); font-size: 9px; }
+.course-qa-evidence { align-items: flex-start; flex-direction: column; }
+.course-citations { display: flex; flex-wrap: wrap; gap: 6px; }
+.course-citations .page-reference { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .qa-heading { margin-bottom: 31px; }
 .qa-layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 28px; align-items: start; }
 .qa-intro { padding: 24px; border: 1px solid var(--line); background: rgb(251 249 243 / .5); }
@@ -388,7 +396,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .drop-zone:fo
 .api-key-dialog footer .remove-key { border-color: #a3766e; color: #8b493f; }
 
 @media (max-width: 900px) {
-  .site-header, .site-footer, .hero-section, .summary-page, .library-page, .course-context, .course-documents, .account-header, .account-page { width: min(100% - 36px, 680px); }
+  .site-header, .site-footer, .hero-section, .summary-page, .library-page, .course-context, .course-documents, .course-qa-section, .account-header, .account-page { width: min(100% - 36px, 680px); }
   .hero-section { grid-template-columns: 1fr; min-height: 0; padding: 50px 0 70px; }
   .hero-copy { max-width: none; }
   .upload-panel { max-width: 580px; width: 100%; margin: 0 auto; }
@@ -396,6 +404,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .drop-zone:fo
   .overview-card, .conclusion-card, .notice-card { grid-template-columns: 1fr; }
   .concept-grid { grid-template-columns: 1fr; }
   .qa-layout { grid-template-columns: 1fr; }
+  .course-qa-section .qa-layout { grid-template-columns: 1fr; }
   .study-start { grid-template-columns: 1fr; }
   .study-start > button { width: fit-content; }
   .library-intro { align-items: flex-start; flex-direction: column; gap: 30px; }

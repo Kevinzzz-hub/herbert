@@ -25,7 +25,7 @@ test("server-renders the Herbert login gate", async () => {
   assert.match(html, /<title>Herbert — PDF 阅读助手<\/title>/i);
   assert.match(html, /正在确认登录状态/);
   assert.match(html, /Herbert 正在准备你的私人学习空间/);
-  assert.match(html, /HERBERT · (?:<!-- -->)?V0\.6/);
+  assert.match(html, /HERBERT · (?:<!-- -->)?V0\.7/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });
 
@@ -159,6 +159,49 @@ test("keeps the PDF in the browser while adding the question interface", async (
   assert.doesNotMatch(questionPanel, /DEEPSEEK_API_KEY|api\.deepseek\.com/);
   assert.match(questionRoute, /validateExtractedPages\(payload\.pages\)/);
   assert.match(questionRoute, /validateQuestionHistory\(payload\.history\)/);
+});
+
+test("answers course questions from locally selected multi-PDF evidence", async () => {
+  const [courseQa, retrieval, courseRoute, reader, server, types] = await Promise.all([
+    readFile(new URL("../app/CourseQa.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/course-retrieval.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/course-ask/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/HerbertReader.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/herbert.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/types.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(reader, /<CourseQa courseName=\{courseName\} documents=\{documents\}/);
+  assert.match(courseQa, /selectCourseEvidence\(searchableDocuments, currentQuestion\)/);
+  assert.match(courseQa, /authenticatedFetch\("\/api\/course-ask"/);
+  assert.match(courseQa, /只把最相关的文字片段发送给 DeepSeek，原 PDF 不会上传/);
+  assert.match(courseQa, /citation\.fileName/);
+  assert.doesNotMatch(courseQa, /DEEPSEEK_API_KEY|api\.deepseek\.com/);
+  assert.match(retrieval, /MAX_COURSE_CONTEXT_CHARACTERS = 18_000/);
+  assert.match(retrieval, /MAX_COURSE_EVIDENCE_ITEMS = 10/);
+  assert.match(retrieval, /MAX_PAGES_PER_DOCUMENT = 4/);
+  assert.match(courseRoute, /requireUserDeepSeekKey\(request\)/);
+  assert.match(courseRoute, /validateCourseEvidence\(payload\.evidence\)/);
+  assert.match(courseRoute, /answerCourseQuestion\(evidence, question, history, deepSeekJson\)/);
+  assert.match(server, /COURSE_QUESTION_SYSTEM_PROMPT/);
+  assert.match(server, /课程问答结果引用了未提供的资料来源/);
+  assert.match(types, /interface CourseQuestionCitation/);
+
+  const response = await dispatch(new Request("http://localhost/api/course-ask", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      evidence: [{
+        documentId: "document-1",
+        fileName: "software.pdf",
+        pageNumber: 1,
+        text: "Software engineering uses systematic processes, methods, and tools. ".repeat(3),
+      }],
+      question: "What does the course say about software engineering?",
+      history: [],
+    }),
+  }));
+  assert.equal(response.status, 401);
+  assert.equal((await response.json()).error.code, "AUTH_REQUIRED");
 });
 
 test("persists extracted pages before AI generation and restores complete summaries", async () => {

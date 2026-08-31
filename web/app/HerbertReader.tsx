@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { CourseDocuments, type DocumentShelfState } from "./CourseDocuments";
+import { CourseQa } from "./CourseQa";
 import { DocumentQa } from "./DocumentQa";
 import { StudyLab } from "./StudyLab";
 import {
@@ -272,6 +273,7 @@ export function HerbertReader({
             onDelete={(document) => void removeDocument(document)}
             onRefresh={() => void loadDocuments()}
           />
+          <CourseQa courseName={courseName} documents={documents} />
           <section className="hero-section course-reader-hero">
           <div className="hero-copy">
             <p className="eyebrow">YOUR QUIET READING DESK</p>

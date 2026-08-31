@@ -39,6 +39,34 @@ export interface QuestionAnswerResult {
   };
 }
 
+export interface CourseEvidencePage {
+  documentId: string;
+  fileName: string;
+  pageNumber: number;
+  text: string;
+}
+
+export interface CourseQuestionCitation {
+  documentId: string;
+  fileName: string;
+  pageNumber: number;
+}
+
+export interface CourseQuestionAnswer {
+  text: string;
+  citations: CourseQuestionCitation[];
+  status: "supported" | "insufficient";
+}
+
+export interface CourseQuestionAnswerResult {
+  answer: CourseQuestionAnswer;
+  meta: {
+    consideredSources: CourseQuestionCitation[];
+    documentCount: number;
+    requestCount: number;
+  };
+}
+
 export interface QuestionHistoryItem {
   role: "user" | "assistant";
   content: string;
