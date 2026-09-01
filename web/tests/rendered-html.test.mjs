@@ -25,8 +25,32 @@ test("server-renders the Herbert login gate", async () => {
   assert.match(html, /<title>Herbert — PDF 阅读助手<\/title>/i);
   assert.match(html, /正在确认登录状态/);
   assert.match(html, /Herbert 正在准备你的私人学习空间/);
-  assert.match(html, /HERBERT · (?:<!-- -->)?V0\.7/);
+  assert.match(html, /HERBERT · (?:<!-- -->)?V0\.8/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
+});
+
+test("publishes clear onboarding, privacy boundaries, and feedback paths", async () => {
+  const [library, authGate, privacy, authErrors] = await Promise.all([
+    readFile(new URL("../app/CourseLibrary.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/AuthGate.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/privacy/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/auth-error-message.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(library, /第一次使用，只需要三步/);
+  assert.match(library, /totalDocuments === 0/);
+  assert.match(library, /github\.com\/Kevinzzz-hub\/herbert\/issues\/new/);
+  assert.match(authGate, /authSendErrorMessage\(error\)/);
+  assert.match(authGate, /authVerifyErrorMessage\(error\)/);
+  assert.match(privacy, /原始 PDF 文件不会发送/);
+  assert.match(privacy, /images: \[\]/);
+  assert.match(authErrors, /Supabase 项目正在运行/);
+
+  const response = await dispatch(new Request("http://localhost/privacy", { headers: { accept: "text/html" } }));
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<title>隐私与数据 \| Herbert<\/title>/i);
+  assert.match(html, /你的课程资料/);
+  assert.doesNotMatch(html, /\/og\.png/);
 });
 
 test("keeps course and document records in the reader's browser", async () => {

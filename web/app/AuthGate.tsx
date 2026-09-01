@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { authSendErrorMessage, authVerifyErrorMessage } from "@/lib/auth-error-message.mjs";
 import { getSupabaseBrowserClient } from "@/lib/supabase-client";
 import type { ApiErrorBody } from "@/lib/types";
 import { HERBERT_VERSION } from "@/lib/version";
@@ -173,8 +174,7 @@ function EmailOtpSignIn() {
       options: { shouldCreateUser: true },
     });
     if (error) {
-      const isRateLimited = error.status === 429 || error.message.toLowerCase().includes("rate");
-      setErrorMessage(isRateLimited ? "验证码发送太频繁，请等待 60 秒后再试。" : "验证码暂时无法发送，请检查邮箱后重试。");
+      setErrorMessage(authSendErrorMessage(error));
       setIsSending(false);
       return;
     }
@@ -194,7 +194,7 @@ function EmailOtpSignIn() {
       type: "email",
     });
     if (error || !data.session) {
-      setErrorMessage("验证码不正确或已经过期，请确认后重试。");
+      setErrorMessage(authVerifyErrorMessage(error));
       setIsVerifying(false);
     }
   };
@@ -360,7 +360,13 @@ function AccountFrame({ children }: { children: React.ReactNode }) {
     <main className="account-shell">
       <header className="account-header"><div className="brand"><span className="brand-mark" aria-hidden="true"><span /></span><span className="brand-copy"><strong>HERBERT</strong><small>PRIVATE AI READING</small></span></div><span>YOUR KEY · YOUR USAGE · YOUR LIBRARY</span></header>
       <section className="account-page">{children}</section>
-      <footer className="site-footer"><span>HERBERT · {HERBERT_VERSION}</span><p>Bring your own intelligence.</p></footer>
+      <footer className="site-footer account-footer">
+        <span>HERBERT · {HERBERT_VERSION}</span>
+        <nav aria-label="Herbert 帮助链接">
+          <a href="/privacy">隐私与数据</a>
+          <a href="https://github.com/Kevinzzz-hub/herbert/issues/new" target="_blank" rel="noreferrer">反馈问题</a>
+        </nav>
+      </footer>
     </main>
   );
 }

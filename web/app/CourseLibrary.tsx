@@ -45,6 +45,7 @@ export function CourseLibrary({
   const [backupError, setBackupError] = useState("");
   const [busyCourseId, setBusyCourseId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const totalDocuments = courses.reduce((total, course) => total + course.documentCount, 0);
 
   const loadCourses = async () => {
     setState("loading");
@@ -172,6 +173,16 @@ export function CourseLibrary({
         {backupMessage ? <p className="backup-notice" role="status">{backupMessage}</p> : null}
         {backupError ? <p className="backup-notice is-error" role="alert">{backupError}</p> : null}
 
+        {state === "ready" && totalDocuments === 0 ? (
+          <OnboardingGuide
+            hasCourse={courses.length > 0}
+            onContinue={() => {
+              if (courses[0]) setSelectedCourse(courses[0]);
+              else setIsCreating(true);
+            }}
+          />
+        ) : null}
+
         {isCreating ? (
           <CourseForm
             ownerId={ownerId}
@@ -225,7 +236,13 @@ export function CourseLibrary({
           </section>
         ) : null}
       </section>
-      <footer className="site-footer"><span>HERBERT · {HERBERT_VERSION}</span><p>One shelf for every course.</p></footer>
+      <footer className="site-footer account-footer">
+        <span>HERBERT · {HERBERT_VERSION}</span>
+        <nav aria-label="Herbert 帮助链接">
+          <a href="/privacy">隐私与数据</a>
+          <a href="https://github.com/Kevinzzz-hub/herbert/issues/new" target="_blank" rel="noreferrer">反馈问题</a>
+        </nav>
+      </footer>
       {courseToDelete ? (
         <DeleteCourseDialog
           ownerId={ownerId}
@@ -258,12 +275,39 @@ function LibraryHeader({
         <span className="brand-mark" aria-hidden="true"><span /></span>
         <span className="brand-copy"><strong>HERBERT</strong><small>COURSE READING LIBRARY</small></span>
       </div>
-      <div className="library-account-actions">
-        <div><span>{accountEmail}</span><strong>{keyHint}</strong></div>
-        <button type="button" onClick={onManageKey}>管理 AI</button>
-        <button type="button" onClick={onSignOut}>退出</button>
+      <div className="library-header-actions">
+        <nav className="library-product-links" aria-label="产品信息">
+          <a href="/privacy">隐私</a>
+          <a href="https://github.com/Kevinzzz-hub/herbert/issues/new" target="_blank" rel="noreferrer">反馈</a>
+        </nav>
+        <div className="library-account-actions">
+          <div><span>{accountEmail}</span><strong>{keyHint}</strong></div>
+          <button type="button" onClick={onManageKey}>管理 AI</button>
+          <button type="button" onClick={onSignOut}>退出</button>
+        </div>
       </div>
     </header>
+  );
+}
+
+function OnboardingGuide({ hasCourse, onContinue }: { hasCourse: boolean; onContinue: () => void }) {
+  return (
+    <section className="onboarding-guide" aria-labelledby="onboarding-title">
+      <div className="onboarding-heading">
+        <p>FIRST STUDY SESSION</p>
+        <h2 id="onboarding-title">第一次使用，只需要三步</h2>
+        <span>{hasCourse ? "2 / 3" : "1 / 3"}</span>
+      </div>
+      <ol>
+        <li className="is-complete"><span>01</span><div><strong>连接自己的 AI</strong><p>DeepSeek API Key 已经安全连接。</p></div><i aria-hidden="true">✓</i></li>
+        <li className={hasCourse ? "is-complete" : ""}><span>02</span><div><strong>建立一门课程</strong><p>把同一主题的资料放进一个学习空间。</p></div><i aria-hidden="true">{hasCourse ? "✓" : "→"}</i></li>
+        <li><span>03</span><div><strong>加入第一份 PDF</strong><p>支持可复制文字、最多 12 MB、120 页的 PDF。</p></div><i aria-hidden="true">→</i></li>
+      </ol>
+      <div className="onboarding-action">
+        <p>原始 PDF 不会上传保存；AI 处理规则可在“隐私与数据”中查看。</p>
+        <button type="button" onClick={onContinue}>{hasCourse ? "进入课程并上传 PDF" : "创建第一门课程"}<span>→</span></button>
+      </div>
+    </section>
   );
 }
 
