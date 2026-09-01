@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
+import { createAiJson } from "@/lib/ai-provider";
 import {
-  deepSeekJson,
   generateStudyPack,
   HerbertWebError,
   validateExtractedPages,
   validatePdfFileName,
   validateStudySummary,
 } from "@/lib/herbert";
+import { requireUserAiCredential } from "@/lib/user-api-key";
 import type { ApiErrorBody, StudyPackResult } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
+    const aiJson = createAiJson(await requireUserAiCredential(request));
     let input: unknown;
     try {
       input = await request.json();
@@ -26,7 +28,7 @@ export async function POST(request: Request) {
     const pages = validateExtractedPages(payload.pages);
     const allowedPages = new Set(pages.map((page) => page.pageNumber));
     const summary = validateStudySummary(payload.summary, allowedPages);
-    const result = await generateStudyPack(pages, summary, deepSeekJson);
+    const result = await generateStudyPack(pages, summary, aiJson);
     const response: StudyPackResult = {
       studyPack: result.studyPack,
       meta: { consideredPages: result.consideredPages, requestCount: 1 },

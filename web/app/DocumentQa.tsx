@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import type { TextPage } from "@/lib/herbert";
 import type {
   ApiErrorBody,
@@ -51,7 +52,7 @@ export function DocumentQa({ fileName, pages }: { fileName: string; pages: TextP
     setIsAnswering(true);
 
     try {
-      const response = await fetch("/api/ask", {
+      const response = await authenticatedFetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileName, pages, question: currentQuestion, history }),
@@ -100,7 +101,7 @@ export function DocumentQa({ fileName, pages }: { fileName: string; pages: TextP
               </button>
             ))}
           </div>
-          <small>为了回答问题，相关页文字、问题和最近对话会发送给 DeepSeek。原 PDF 文件不会上传。</small>
+          <small>为了回答问题，相关页文字、问题和最近对话会发送给当前 AI 服务。原 PDF 文件不会上传。</small>
         </div>
 
         <div className="qa-desk">

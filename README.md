@@ -8,23 +8,19 @@ Herbert helps readers understand long PDF documents by extracting their text and
 
 Long documents often leave readers unsure about the main argument, important ideas, and final conclusion. Herbert aims to make the first pass through a document faster and more focused.
 
-## MVP
+## Web V1.0
 
-The project now supports both a command-line prototype and a browser-based V1.
-The web version will:
+The public web app is available at
+<https://herbert-pdf-reader.vercel.app/>. V1.0 includes:
 
-1. Accept a text-based PDF in the browser.
-2. Check whether the uploaded file is a PDF.
-3. Extract text from the document.
-4. Generate an AI-assisted structured summary.
-5. Display the summary to the reader.
-
-The summary will contain:
-
-- a one-sentence overview;
-- three to seven key points;
-- the author's main conclusion;
-- concepts worth paying attention to.
+- passwordless email-code login;
+- course workspaces containing multiple PDFs;
+- page-cited summaries and document Q&A;
+- course-wide retrieval and Q&A across PDFs;
+- flashcards, quizzes, and saved study progress;
+- local course backup and restore;
+- per-user encrypted API credentials;
+- DeepSeek, OpenAI, Gemini, Claude, and OpenRouter support.
 
 ## Error handling
 
@@ -92,7 +88,7 @@ Run the automated tests:
 python -m pytest
 ```
 
-## DeepSeek summarization
+## Command-line DeepSeek summarization
 
 Herbert uses DeepSeek's OpenAI-compatible API. The `openai` Python package is
 only the protocol client here; requests are sent to `https://api.deepseek.com`.
@@ -134,8 +130,8 @@ citations are included for verification.
 ## Web app (V1)
 
 The browser version lives in `web/`. It parses the original PDF locally in the
-browser, sends only validated extracted text to the server, and keeps the
-DeepSeek key on the server side.
+browser, sends only validated extracted text to the server, and retrieves each
+reader's encrypted AI credential only for authenticated server requests.
 
 ```bash
 cd web
@@ -144,29 +140,29 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open <http://localhost:3000>, choose a text-based PDF, and select **开始总结**.
+Open <http://localhost:3000>, sign in, connect an AI provider, create a course,
+and upload a text-based PDF.
 See [`docs/WEB_V1_GUIDE.zh-CN.md`](docs/WEB_V1_GUIDE.zh-CN.md) for a Chinese
 walkthrough of the architecture and each important source file.
 
-## Not included in the first version
+## Not included in V1.0
 
 - OCR for scanned PDFs;
 - related-knowledge expansion;
-- follow-up questions about the document;
-- user accounts and reading history;
+- cloud synchronization of course content between devices;
+- guaranteed email delivery across every mailbox provider;
 - understanding charts, images, or complex layouts.
 
 ## Roadmap
 
 - **V0 — Prototype (complete):** extract text from a local PDF and generate a summary.
-- **V1 — Web app (ready to deploy):** upload a PDF and read its summary in a browser.
-- **V2 — Reliable summaries:** support longer documents, citations, and better error handling.
-- **V3 — Reading assistant:** add document Q&A and carefully sourced knowledge expansion.
-- **V4 — Product release:** add tests, deployment, documentation, and a public demo.
+- **V0.5 — Reading assistant (complete):** summaries, citations, Q&A, and study tools.
+- **V0.7 — Course workspace (complete):** multi-PDF courses, retrieval, and backup.
+- **V0.9 — Public beta (complete):** account isolation and multiple AI providers.
+- **V1.0 — Public release:** tested, documented, backed up on GitHub, and deployed.
 
 ## Project status
 
-Herbert V0 and the first web V1 are implemented locally. PDF validation, text
-extraction, structured DeepSeek summaries, page citations, download, responsive
-UI, and automated tests are included. Deployment and public feedback are the
-next milestones.
+Herbert V1.0 is publicly deployed. The original command-line prototype remains
+available, while the web app is the primary product. Future work should be based
+on real reader feedback rather than expanding the feature list by default.

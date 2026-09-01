@@ -1,5 +1,5 @@
-import { HerbertReader } from "./HerbertReader";
+import { AuthGate } from "./AuthGate";
 
 export default function Home() {
-  return <HerbertReader />;
+  return <AuthGate />;
 }

@@ -22,6 +22,7 @@ export interface SummaryMeta {
 export interface SummaryResult {
   summary: DocumentSummary;
   meta: SummaryMeta;
+  documentId?: string;
 }
 
 export interface DocumentQuestionAnswer {
@@ -34,6 +35,34 @@ export interface QuestionAnswerResult {
   answer: DocumentQuestionAnswer;
   meta: {
     consideredPages: number[];
+    requestCount: number;
+  };
+}
+
+export interface CourseEvidencePage {
+  documentId: string;
+  fileName: string;
+  pageNumber: number;
+  text: string;
+}
+
+export interface CourseQuestionCitation {
+  documentId: string;
+  fileName: string;
+  pageNumber: number;
+}
+
+export interface CourseQuestionAnswer {
+  text: string;
+  citations: CourseQuestionCitation[];
+  status: "supported" | "insufficient";
+}
+
+export interface CourseQuestionAnswerResult {
+  answer: CourseQuestionAnswer;
+  meta: {
+    consideredSources: CourseQuestionCitation[];
+    documentCount: number;
     requestCount: number;
   };
 }
@@ -70,9 +99,61 @@ export interface StudyPackResult {
   };
 }
 
+export interface QuizAttempt {
+  correctCount: number;
+  totalCount: number;
+  completedAt: string;
+}
+
+export interface DocumentStudyRecord {
+  studyPack: StudyPack;
+  consideredPages: number[];
+  generatedAt: string;
+  lastStudiedAt: string;
+  quizAttempts: QuizAttempt[];
+}
+
 export interface ApiErrorBody {
   error: {
     code: string;
     message: string;
   };
+}
+
+export interface Course {
+  id: string;
+  ownerId: string;
+  title: string;
+  description: string;
+  documentCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CourseListResult {
+  courses: Course[];
+}
+
+export interface CourseResult {
+  course: Course;
+}
+
+export type CourseDocumentStatus = "pending" | "complete" | "failed";
+
+export interface CourseDocument {
+  id: string;
+  ownerId: string;
+  courseId: string;
+  fileName: string;
+  fileSize: number;
+  pageCount: number;
+  pages: import("./herbert").TextPage[];
+  summary: DocumentSummary | null;
+  summaryMeta: SummaryMeta | null;
+  studyRecord?: DocumentStudyRecord | null;
+  model: string;
+  status: CourseDocumentStatus;
+  errorMessage: string;
+  createdAt: string;
+  updatedAt: string;
 }
