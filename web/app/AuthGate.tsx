@@ -157,6 +157,7 @@ function EmailOtpSignIn() {
   const [isSending, setIsSending] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
+  const [codeSentAt, setCodeSentAt] = useState<Date | null>(null);
   const [resendAvailableIn, setResendAvailableIn] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -182,6 +183,7 @@ function EmailOtpSignIn() {
       return;
     }
     setCodeSent(true);
+    setCodeSentAt(new Date());
     setResendAvailableIn(60);
     setIsSending(false);
   };
@@ -204,6 +206,7 @@ function EmailOtpSignIn() {
 
   const changeEmail = () => {
     setCodeSent(false);
+    setCodeSentAt(null);
     setOtp("");
     setResendAvailableIn(0);
     setErrorMessage("");
@@ -218,7 +221,7 @@ function EmailOtpSignIn() {
         {codeSent ? (
           <>
             <div className="mail-sent" role="status">
-              <span>{EMAIL_OTP_LENGTH}</span><div><strong>验证码已经发送</strong><p>请查看 {email.trim()} 的邮件，并把 {EMAIL_OTP_LENGTH} 位数字输入下方。不要点击旧的登录链接。</p></div>
+              <span>{EMAIL_OTP_LENGTH}</span><div><strong>验证码已经发送</strong><p>请查看 {email.trim()} 的最新邮件，并把 {EMAIL_OTP_LENGTH} 位数字输入下方。{codeSentAt ? `本次发送于 ${formatOtpTime(codeSentAt)}。` : ""}重新发送后，之前邮件中的验证码会立即失效。</p></div>
             </div>
             <form className="otp-form" onSubmit={(event) => { event.preventDefault(); void verifyCode(); }}>
               <label htmlFor="account-otp">{EMAIL_OTP_LENGTH} 位验证码</label>
@@ -236,7 +239,7 @@ function EmailOtpSignIn() {
                 placeholder={"0".repeat(EMAIL_OTP_LENGTH)}
                 aria-describedby="otp-help"
               />
-              <small id="otp-help">验证码默认 1 小时内有效；同一个验证码只能使用一次。</small>
+              <small id="otp-help">验证码默认 1 小时内有效；请只使用本页面最后一次发送后收到的验证码。</small>
               <button type="submit" disabled={otp.length !== EMAIL_OTP_LENGTH || isVerifying}>{isVerifying ? "正在验证" : "验证并登录"}<span>→</span></button>
             </form>
             <div className="auth-secondary-actions">
@@ -414,4 +417,13 @@ function AccountFrame({ children }: { children: React.ReactNode }) {
 
 function formatAccountDate(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "short", day: "numeric" }).format(new Date(value));
+}
+
+function formatOtpTime(value: Date): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(value);
 }

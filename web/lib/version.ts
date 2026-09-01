@@ -1,1 +1,1 @@
-export const HERBERT_VERSION = "V0.9";
+export const HERBERT_VERSION = "V1.0";

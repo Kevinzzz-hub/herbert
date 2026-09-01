@@ -40,7 +40,7 @@ export function authVerifyErrorMessage(error) {
     return "暂时无法连接登录服务，请检查网络后重新验证。";
   }
   if (/expired|invalid|token|otp/.test(details)) {
-    return "验证码不正确或已经过期，请确认后重试。";
+    return "验证码与最后一次发送不匹配或已经过期。若刚刚重新发送，请等待最新一封邮件；旧验证码已经失效。";
   }
   return "暂时无法验证这个验证码，请重新发送后再试。";
 }

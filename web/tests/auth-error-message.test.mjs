@@ -14,5 +14,6 @@ test("explains SMTP and email authorization failures without exposing provider d
 
 test("keeps OTP verification failures actionable", () => {
   assert.match(authVerifyErrorMessage({ message: "Token has expired" }), /已经过期/);
+  assert.match(authVerifyErrorMessage({ message: "Token has expired" }), /最新一封邮件/);
   assert.match(authVerifyErrorMessage({ status: 429, message: "Too many requests" }), /太频繁/);
 });

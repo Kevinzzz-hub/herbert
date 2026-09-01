@@ -25,7 +25,7 @@ test("server-renders the Herbert login gate", async () => {
   assert.match(html, /<title>Herbert — PDF 阅读助手<\/title>/i);
   assert.match(html, /正在确认登录状态/);
   assert.match(html, /Herbert 正在准备你的私人学习空间/);
-  assert.match(html, /HERBERT · (?:<!-- -->)?V0\.9/);
+  assert.match(html, /HERBERT · (?:<!-- -->)?V1\.0/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });
 
@@ -375,6 +375,8 @@ test("uses same-browser email OTP login and a server-only multi-provider Vault",
   assert.match(authGate, /const EMAIL_OTP_LENGTH = 8/);
   assert.match(authGate, /token\.length !== EMAIL_OTP_LENGTH/);
   assert.match(authGate, /maxLength=\{EMAIL_OTP_LENGTH\}/);
+  assert.match(authGate, /本次发送于/);
+  assert.match(authGate, /之前邮件中的验证码会立即失效/);
   assert.doesNotMatch(authGate, /6 位验证码/);
   assert.doesNotMatch(authGate, /emailRedirectTo/);
   assert.match(authGate, /authenticatedFetch\("\/api\/account\/api-key"/);
