@@ -25,12 +25,14 @@ export function CourseLibrary({
   ownerId,
   accountEmail,
   keyHint,
+  aiModelLabel,
   onManageKey,
   onSignOut,
 }: {
   ownerId: string;
   accountEmail: string;
   keyHint: string;
+  aiModelLabel: string;
   onManageKey: () => void;
   onSignOut: () => void;
 }) {
@@ -130,6 +132,7 @@ export function CourseLibrary({
         courseId={selectedCourse.id}
         courseName={selectedCourse.title}
         ownerId={ownerId}
+        aiModelLabel={aiModelLabel}
         onBackToCourses={() => {
           setSelectedCourse(null);
           void loadCourses();
@@ -299,7 +302,7 @@ function OnboardingGuide({ hasCourse, onContinue }: { hasCourse: boolean; onCont
         <span>{hasCourse ? "2 / 3" : "1 / 3"}</span>
       </div>
       <ol>
-        <li className="is-complete"><span>01</span><div><strong>连接自己的 AI</strong><p>DeepSeek API Key 已经安全连接。</p></div><i aria-hidden="true">✓</i></li>
+        <li className="is-complete"><span>01</span><div><strong>连接自己的 AI</strong><p>AI 服务和 API Key 已经安全连接。</p></div><i aria-hidden="true">✓</i></li>
         <li className={hasCourse ? "is-complete" : ""}><span>02</span><div><strong>建立一门课程</strong><p>把同一主题的资料放进一个学习空间。</p></div><i aria-hidden="true">{hasCourse ? "✓" : "→"}</i></li>
         <li><span>03</span><div><strong>加入第一份 PDF</strong><p>支持可复制文字、最多 12 MB、120 页的 PDF。</p></div><i aria-hidden="true">→</i></li>
       </ol>

@@ -119,7 +119,7 @@ export function CourseQa({
               </button>
             ))}
           </div>
-          <small>检索在当前浏览器完成；只把最相关的文字片段发送给 DeepSeek，原 PDF 不会上传。</small>
+          <small>检索在当前浏览器完成；只把最相关的文字片段发送给当前 AI 服务，原 PDF 不会上传。</small>
         </div>
 
         <div className="qa-desk">

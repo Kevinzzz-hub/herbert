@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
+import { createAiJson } from "@/lib/ai-provider";
 import {
   answerCourseQuestion,
-  createDeepSeekJson,
   HerbertWebError,
   validateCourseEvidence,
   validateQuestion,
   validateQuestionHistory,
 } from "@/lib/herbert";
-import { requireUserDeepSeekKey } from "@/lib/user-api-key";
+import { requireUserAiCredential } from "@/lib/user-api-key";
 import type { ApiErrorBody, CourseQuestionAnswerResult } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
-    const deepSeekJson = createDeepSeekJson(await requireUserDeepSeekKey(request));
+    const aiJson = createAiJson(await requireUserAiCredential(request));
     let input: unknown;
     try {
       input = await request.json();
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const evidence = validateCourseEvidence(payload.evidence);
     const question = validateQuestion(payload.question);
     const history = validateQuestionHistory(payload.history);
-    const result = await answerCourseQuestion(evidence, question, history, deepSeekJson);
+    const result = await answerCourseQuestion(evidence, question, history, aiJson);
     const response: CourseQuestionAnswerResult = {
       answer: result.answer,
       meta: {

@@ -102,7 +102,7 @@ export function StudyLab({
             <p className="study-kicker">ACTIVE RECALL</p>
             <h3>知识卡片 + 5 道小测验</h3>
             <p>Herbert 会从总结引用过的原文页面中制作学习材料。先主动回忆，再查看答案，比反复阅读更能暴露理解盲区。</p>
-            <small>相关页文字和当前总结会发送给 DeepSeek；生成结果会保存在当前浏览器的课程记录中。</small>
+            <small>相关页文字和当前总结会发送给当前 AI 服务；生成结果会保存在当前浏览器的课程记录中。</small>
           </div>
           <button type="button" onClick={() => void generate()} disabled={isGenerating}>
             {isGenerating ? "正在制作学习材料" : "生成学习材料"}<span aria-hidden="true">→</span>

@@ -31,11 +31,13 @@ export function HerbertReader({
   courseId,
   courseName,
   ownerId,
+  aiModelLabel,
   onBackToCourses,
 }: {
   courseId: string;
   courseName: string;
   ownerId: string;
+  aiModelLabel: string;
   onBackToCourses?: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -180,7 +182,7 @@ export function HerbertReader({
         fileName: file.name,
         fileSize: file.size,
         pages,
-        model: "DeepSeek",
+        model: aiModelLabel,
       });
       setDocuments((current) => [document, ...current]);
       setDocumentState("ready");
@@ -330,7 +332,7 @@ export function HerbertReader({
                 )}
               </div>
             )}
-            <div className="panel-footnote"><span aria-hidden="true">◇</span>总结由 DeepSeek 生成，重要内容请结合页码核对</div>
+            <div className="panel-footnote"><span aria-hidden="true">◇</span>总结由当前 AI 服务生成，重要内容请结合页码核对</div>
           </div>
           </section>
         </>

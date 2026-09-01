@@ -1,9 +1,18 @@
 import "server-only";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
+import { verifyAiCredential, type AiCredential } from "./ai-provider";
+import {
+  getAiProviderOption,
+  isAiProviderId,
+  type AiProviderId,
+} from "./ai-provider-catalog";
 import { HerbertWebError } from "./herbert";
 
 export interface ApiKeyStatus {
   configured: boolean;
+  provider: AiProviderId | null;
+  providerLabel: string | null;
+  model: string | null;
   keyHint: string | null;
   updatedAt: string | null;
 }
@@ -56,78 +65,95 @@ export async function requireAuthenticatedUser(request: Request): Promise<User> 
 
 export async function getApiKeyStatus(userId: string): Promise<ApiKeyStatus> {
   const { data, error } = await getAdminServerClient()
-    .rpc("herbert_deepseek_key_status", { p_user_id: userId })
+    .rpc("herbert_ai_credential_status", { p_user_id: userId })
     .maybeSingle();
   if (error) throw vaultError();
-  if (!data) return { configured: false, keyHint: null, updatedAt: null };
-  const row = data as { key_hint: string; updated_at: string };
-  return { configured: true, keyHint: row.key_hint, updatedAt: row.updated_at };
+  if (!data) return emptyStatus();
+  const row = data as { provider: unknown; model: string; key_hint: string; updated_at: string };
+  if (!isAiProviderId(row.provider)) throw vaultError();
+  return statusFromRow(row.provider, row.model, row.key_hint, row.updated_at);
 }
 
-export async function saveDeepSeekApiKey(userId: string, apiKey: string): Promise<ApiKeyStatus> {
-  await verifyDeepSeekApiKey(apiKey);
-  const hint = `DeepSeek ••••${apiKey.slice(-4)}`;
+export async function saveAiCredential(userId: string, credential: AiCredential): Promise<ApiKeyStatus> {
+  await verifyAiCredential(credential.provider, credential.apiKey);
+  const provider = getAiProviderOption(credential.provider);
+  const hint = `${provider.label} ••••${credential.apiKey.slice(-4)}`;
   const { data, error } = await getAdminServerClient()
-    .rpc("herbert_store_deepseek_key", {
+    .rpc("herbert_store_ai_credential", {
       p_user_id: userId,
-      p_secret: apiKey,
+      p_provider: credential.provider,
+      p_model: credential.model,
+      p_secret: credential.apiKey,
       p_hint: hint,
     })
     .single();
   if (error) throw vaultError();
-  const row = data as { key_hint: string; updated_at: string };
-  return { configured: true, keyHint: row.key_hint, updatedAt: row.updated_at };
+  const row = data as { provider: AiProviderId; model: string; key_hint: string; updated_at: string };
+  return statusFromRow(row.provider, row.model, row.key_hint, row.updated_at);
 }
 
-export async function deleteDeepSeekApiKey(userId: string): Promise<void> {
+export async function deleteAiCredential(userId: string): Promise<void> {
   const { error } = await getAdminServerClient()
-    .rpc("herbert_delete_deepseek_key", { p_user_id: userId });
+    .rpc("herbert_delete_ai_credential", { p_user_id: userId });
   if (error) throw vaultError();
 }
 
-export async function requireUserDeepSeekKey(request: Request): Promise<string> {
+export async function requireUserAiCredential(request: Request): Promise<AiCredential> {
   const user = await requireAuthenticatedUser(request);
   const { data, error } = await getAdminServerClient()
-    .rpc("herbert_get_deepseek_key", { p_user_id: user.id })
+    .rpc("herbert_get_ai_credential", { p_user_id: user.id })
     .maybeSingle();
   if (error) throw vaultError();
-  const apiKey = (data as { decrypted_secret?: string } | null)?.decrypted_secret?.trim();
-  if (!apiKey) {
-    throw new HerbertWebError("API_KEY_REQUIRED", "请先连接你自己的 DeepSeek API Key。", 428);
+  const row = data as { provider?: unknown; model?: string; decrypted_secret?: string } | null;
+  if (!row || !isAiProviderId(row.provider) || !row.model?.trim() || !row.decrypted_secret?.trim()) {
+    throw new HerbertWebError("API_KEY_REQUIRED", "请先连接你自己的 AI 服务。", 428);
   }
-  return apiKey;
+  return { provider: row.provider, model: row.model.trim(), apiKey: row.decrypted_secret.trim() };
 }
 
-function normalizeDeepSeekApiKey(value: unknown): string {
-  if (typeof value !== "string") {
-    throw new HerbertWebError("INVALID_PROVIDER_KEY", "请输入 DeepSeek API Key。", 400);
+export function readAiCredentialInput(value: unknown): AiCredential {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new HerbertWebError("INVALID_PROVIDER_KEY", "AI 连接内容格式不正确。", 400);
   }
-  const apiKey = value.trim();
+  const input = value as Record<string, unknown>;
+  if (!isAiProviderId(input.provider)) {
+    throw new HerbertWebError("INVALID_PROVIDER", "请选择 Herbert 支持的 AI 服务商。", 400);
+  }
+  const option = getAiProviderOption(input.provider);
+  if (typeof input.apiKey !== "string") {
+    throw new HerbertWebError("INVALID_PROVIDER_KEY", `请输入 ${option.label} API Key。`, 400);
+  }
+  const apiKey = input.apiKey.trim();
   if (apiKey.length < 8 || apiKey.length > 512 || /\s/.test(apiKey)) {
-    throw new HerbertWebError("INVALID_PROVIDER_KEY", "DeepSeek API Key 格式不正确。", 400);
+    throw new HerbertWebError("INVALID_PROVIDER_KEY", `${option.label} API Key 格式不正确。`, 400);
   }
-  return apiKey;
+  const model = typeof input.model === "string" && input.model.trim()
+    ? input.model.trim()
+    : option.defaultModel;
+  if (model.length > 120 || !/^[a-zA-Z0-9._~:/-]+$/.test(model)) {
+    throw new HerbertWebError("INVALID_MODEL", "模型名称格式不正确，请检查后重试。", 400);
+  }
+  return { provider: input.provider, model, apiKey };
 }
 
-export function readDeepSeekApiKey(value: unknown): string {
-  return normalizeDeepSeekApiKey(value);
+function emptyStatus(): ApiKeyStatus {
+  return { configured: false, provider: null, providerLabel: null, model: null, keyHint: null, updatedAt: null };
 }
 
-async function verifyDeepSeekApiKey(apiKey: string): Promise<void> {
-  let response: Response;
-  try {
-    response = await fetch("https://api.deepseek.com/models", {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-  } catch {
-    throw new HerbertWebError("PROVIDER_ERROR", "暂时无法连接 DeepSeek，请稍后再保存。", 502);
-  }
-  if (response.status === 401 || response.status === 403) {
-    throw new HerbertWebError("INVALID_PROVIDER_KEY", "这个 DeepSeek API Key 无法通过验证。", 400);
-  }
-  if (!response.ok) {
-    throw new HerbertWebError("PROVIDER_ERROR", `DeepSeek 暂时无法验证密钥（${response.status}）。`, 502);
-  }
+function statusFromRow(
+  provider: AiProviderId,
+  model: string,
+  keyHint: string,
+  updatedAt: string,
+): ApiKeyStatus {
+  return {
+    configured: true,
+    provider,
+    providerLabel: getAiProviderOption(provider).label,
+    model,
+    keyHint,
+    updatedAt,
+  };
 }
 
 function vaultError(): HerbertWebError {

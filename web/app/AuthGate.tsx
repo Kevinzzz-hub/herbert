@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
+import {
+  AI_PROVIDER_OPTIONS,
+  getAiProviderOption,
+  type AiCredentialStatus,
+  type AiProviderId,
+} from "@/lib/ai-provider-catalog";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import { authSendErrorMessage, authVerifyErrorMessage } from "@/lib/auth-error-message.mjs";
 import { getSupabaseBrowserClient } from "@/lib/supabase-client";
@@ -9,11 +15,7 @@ import type { ApiErrorBody } from "@/lib/types";
 import { HERBERT_VERSION } from "@/lib/version";
 import { CourseLibrary } from "./CourseLibrary";
 
-interface ApiKeyStatus {
-  configured: boolean;
-  keyHint: string | null;
-  updatedAt: string | null;
-}
+type ApiKeyStatus = AiCredentialStatus;
 
 type GateState = "loading-auth" | "signed-out" | "loading-key" | "needs-key" | "ready" | "error";
 
@@ -130,6 +132,7 @@ export function AuthGate() {
         ownerId={session.user.id}
         accountEmail={session.user.email ?? "Herbert 用户"}
         keyHint={keyStatus.keyHint ?? "已连接"}
+        aiModelLabel={`${keyStatus.providerLabel ?? "AI"} · ${keyStatus.model ?? "默认模型"}`}
         onManageKey={() => setIsManagingKey(true)}
         onSignOut={() => void signOut()}
       />
@@ -269,9 +272,9 @@ function ApiKeySetup({
       <div className="key-setup-layout">
         <div className="key-setup-copy">
           <p className="account-kicker">ONE LAST STEP</p>
-          <h1>连接你的<br /><em>DeepSeek API Key。</em></h1>
-          <p>Herbert 用你的密钥完成总结、问答和复习材料。模型费用直接计入你自己的 DeepSeek 账户。</p>
-          <ol><li><span>01</span>服务器先向 DeepSeek 验证密钥</li><li><span>02</span>通过后存入 Supabase Vault 加密保险箱</li><li><span>03</span>网页以后只显示末尾四位</li></ol>
+          <h1>连接你的<br /><em>AI 服务。</em></h1>
+          <p>Herbert 支持多家 AI 服务商。模型费用直接计入你选择的服务商账户，我们不代收模型费用。</p>
+          <ol><li><span>01</span>选择服务商和模型</li><li><span>02</span>服务器验证后存入 Supabase Vault</li><li><span>03</span>网页以后只显示 Key 末尾四位</li></ol>
         </div>
         <div className="key-setup-card">
           <div className="signed-in-as"><span>当前账号</span><strong>{email}</strong></div>
@@ -288,7 +291,7 @@ function ApiKeyDialog({ status, onClose, onUpdated }: { status: ApiKeyStatus; on
   const [errorMessage, setErrorMessage] = useState("");
 
   const remove = async () => {
-    if (!window.confirm("删除保存在保险箱中的 DeepSeek API Key 吗？删除后 AI 功能会暂停。")) return;
+    if (!window.confirm("删除保存在保险箱中的 AI API Key 吗？删除后 AI 功能会暂停。")) return;
     setIsDeleting(true);
     setErrorMessage("");
     try {
@@ -305,9 +308,17 @@ function ApiKeyDialog({ status, onClose, onUpdated }: { status: ApiKeyStatus; on
   return (
     <div className="dialog-backdrop" role="presentation">
       <div className="api-key-dialog" role="dialog" aria-modal="true" aria-labelledby="api-key-dialog-title">
-        <p>AI CONNECTION</p><h2 id="api-key-dialog-title">管理 DeepSeek API Key</h2>
-        <div className="connected-key"><span>当前连接</span><strong>{status.keyHint}</strong><small>{status.updatedAt ? `更新于 ${formatAccountDate(status.updatedAt)}` : "已经安全保存"}</small></div>
-        <ApiKeyForm submitLabel="验证并替换" onSaved={onUpdated} />
+        <p>AI CONNECTION</p><h2 id="api-key-dialog-title">管理 AI 服务</h2>
+        <div className="connected-key">
+          <span>当前连接</span><strong>{status.keyHint}</strong>
+          <small>{status.providerLabel} · {status.model}{status.updatedAt ? ` · 更新于 ${formatAccountDate(status.updatedAt)}` : ""}</small>
+        </div>
+        <ApiKeyForm
+          initialProvider={status.provider ?? "deepseek"}
+          initialModel={status.model ?? undefined}
+          submitLabel="验证并替换"
+          onSaved={onUpdated}
+        />
         {errorMessage ? <p className="account-error" role="alert">{errorMessage}</p> : null}
         <footer><button type="button" onClick={onClose} disabled={isDeleting}>关闭</button><button className="remove-key" type="button" onClick={() => void remove()} disabled={isDeleting}>{isDeleting ? "正在删除" : "删除密钥"}</button></footer>
       </div>
@@ -315,10 +326,23 @@ function ApiKeyDialog({ status, onClose, onUpdated }: { status: ApiKeyStatus; on
   );
 }
 
-function ApiKeyForm({ onSaved, submitLabel = "验证并保存" }: { onSaved: (status: ApiKeyStatus) => void; submitLabel?: string }) {
+function ApiKeyForm({
+  onSaved,
+  submitLabel = "验证并保存",
+  initialProvider = "deepseek",
+  initialModel,
+}: {
+  onSaved: (status: ApiKeyStatus) => void;
+  submitLabel?: string;
+  initialProvider?: AiProviderId;
+  initialModel?: string;
+}) {
+  const [provider, setProvider] = useState<AiProviderId>(initialProvider);
+  const [model, setModel] = useState(initialModel ?? getAiProviderOption(initialProvider).defaultModel);
   const [apiKey, setApiKey] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const providerOption = getAiProviderOption(provider);
 
   const save = async () => {
     if (!apiKey.trim() || isSaving) return;
@@ -328,7 +352,7 @@ function ApiKeyForm({ onSaved, submitLabel = "验证并保存" }: { onSaved: (st
       const response = await authenticatedFetch("/api/account/api-key", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: apiKey.trim() }),
+        body: JSON.stringify({ provider, model: model.trim(), apiKey: apiKey.trim() }),
       });
       const body = await response.json() as ApiKeyStatus | ApiErrorBody;
       if (!response.ok || "error" in body) throw new Error("error" in body ? body.error.message : "密钥暂时无法保存。");
@@ -342,10 +366,27 @@ function ApiKeyForm({ onSaved, submitLabel = "验证并保存" }: { onSaved: (st
 
   return (
     <form className="api-key-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-      <label htmlFor="deepseek-api-key">DeepSeek API Key</label>
-      <input id="deepseek-api-key" type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-••••••••••••" />
-      <button type="submit" disabled={!apiKey.trim() || isSaving}>{isSaving ? "正在验证" : submitLabel}<span>→</span></button>
-      <small>保存前只调用 DeepSeek 的模型列表接口进行验证，不会生成内容或消耗对话额度。</small>
+      <label htmlFor="ai-provider">AI 服务商</label>
+      <select
+        id="ai-provider"
+        value={provider}
+        onChange={(event) => {
+          const nextProvider = event.target.value as AiProviderId;
+          setProvider(nextProvider);
+          setModel(getAiProviderOption(nextProvider).defaultModel);
+          setErrorMessage("");
+        }}
+      >
+        {AI_PROVIDER_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+      </select>
+      <p className="provider-description">{providerOption.description}</p>
+      <label htmlFor="ai-model">模型</label>
+      <input id="ai-model" type="text" autoComplete="off" spellCheck={false} value={model} onChange={(event) => setModel(event.target.value)} placeholder={providerOption.defaultModel} />
+      <small>{providerOption.modelHelp}</small>
+      <label htmlFor="ai-api-key">{providerOption.label} API Key</label>
+      <input id="ai-api-key" type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={providerOption.keyPlaceholder} />
+      <button type="submit" disabled={!apiKey.trim() || !model.trim() || isSaving}>{isSaving ? `正在验证 ${providerOption.label}` : submitLabel}<span>→</span></button>
+      <small>保存前只验证密钥，不会生成内容。Key 会加密保存在 Supabase Vault。</small>
       {errorMessage ? <p className="account-error" role="alert">{errorMessage}</p> : null}
     </form>
   );

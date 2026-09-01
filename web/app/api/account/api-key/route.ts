@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { HerbertWebError } from "@/lib/herbert";
 import {
-  deleteDeepSeekApiKey,
+  deleteAiCredential,
   getApiKeyStatus,
-  readDeepSeekApiKey,
+  readAiCredentialInput,
   requireAuthenticatedUser,
-  saveDeepSeekApiKey,
+  saveAiCredential,
 } from "@/lib/user-api-key";
 import type { ApiErrorBody } from "@/lib/types";
 
@@ -27,12 +27,7 @@ export async function PUT(request: Request) {
     } catch {
       throw new HerbertWebError("INVALID_REQUEST", "密钥内容格式不正确。", 400);
     }
-    const apiKey = readDeepSeekApiKey(
-      input && typeof input === "object" && !Array.isArray(input)
-        ? (input as Record<string, unknown>).apiKey
-        : null,
-    );
-    return privateJson(await saveDeepSeekApiKey(user.id, apiKey));
+    return privateJson(await saveAiCredential(user.id, readAiCredentialInput(input)));
   } catch (error) {
     return errorResponse(error);
   }
@@ -41,8 +36,15 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const user = await requireAuthenticatedUser(request);
-    await deleteDeepSeekApiKey(user.id);
-    return privateJson({ configured: false, keyHint: null, updatedAt: null });
+    await deleteAiCredential(user.id);
+    return privateJson({
+      configured: false,
+      provider: null,
+      providerLabel: null,
+      model: null,
+      keyHint: null,
+      updatedAt: null,
+    });
   } catch (error) {
     return errorResponse(error);
   }

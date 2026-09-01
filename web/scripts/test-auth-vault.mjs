@@ -19,7 +19,6 @@ const browserLikeClient = createClient(supabaseUrl, publishableKey, {
 });
 const email = `herbert-e2e-${Date.now()}@example.com`;
 const password = `Herbert-${crypto.randomUUID()}-test`;
-const productionUrl = "https://herbert-pdf-reader.kevinzhangzzz.chatgpt.site";
 let userId = null;
 
 try {
@@ -31,15 +30,6 @@ try {
   if (createError || !created.user) throw createError || new Error("Test user was not created.");
   userId = created.user.id;
 
-  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-    type: "magiclink",
-    email,
-    options: { redirectTo: productionUrl },
-  });
-  if (linkError || !linkData.properties?.action_link) throw linkError || new Error("Magic link was not generated.");
-  const actionLink = new URL(linkData.properties.action_link);
-  const productionRedirectAllowed = actionLink.searchParams.get("redirect_to") === productionUrl;
-
   const { data: signedIn, error: signInError } = await browserLikeClient.auth.signInWithPassword({ email, password });
   if (signInError || !signedIn.session) throw signInError || new Error("Test session was not created.");
   const authorization = `Bearer ${signedIn.session.access_token}`;
@@ -47,7 +37,7 @@ try {
   const saveResponse = await fetch("http://localhost:3000/api/account/api-key", {
     method: "PUT",
     headers: { Authorization: authorization, "Content-Type": "application/json" },
-    body: JSON.stringify({ apiKey: deepSeekKey }),
+    body: JSON.stringify({ provider: "deepseek", model: "deepseek-v4-flash", apiKey: deepSeekKey }),
   });
   const saveBody = await saveResponse.json();
   if (saveResponse.status !== 400 || saveBody?.error?.code !== "INVALID_PROVIDER_KEY") {
@@ -55,8 +45,10 @@ try {
   }
 
   const syntheticSecret = `herbert-disposable-${crypto.randomUUID()}`;
-  const { error: vaultWriteError } = await admin.rpc("herbert_store_deepseek_key", {
+  const { error: vaultWriteError } = await admin.rpc("herbert_store_ai_credential", {
     p_user_id: userId,
+    p_provider: "deepseek",
+    p_model: "deepseek-v4-flash",
     p_secret: syntheticSecret,
     p_hint: "Disposable ••••test",
   });
@@ -81,7 +73,6 @@ try {
 
   console.log(JSON.stringify({
     login: true,
-    productionRedirectAllowed,
     invalidKeyRejected: true,
     vaultWrite: true,
     maskedStatus: true,

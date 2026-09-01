@@ -25,7 +25,7 @@ test("server-renders the Herbert login gate", async () => {
   assert.match(html, /<title>Herbert — PDF 阅读助手<\/title>/i);
   assert.match(html, /正在确认登录状态/);
   assert.match(html, /Herbert 正在准备你的私人学习空间/);
-  assert.match(html, /HERBERT · (?:<!-- -->)?V0\.8/);
+  assert.match(html, /HERBERT · (?:<!-- -->)?V0\.9/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });
 
@@ -75,10 +75,12 @@ test("keeps course and document records in the reader's browser", async () => {
 });
 
 test("removes starter assets and keeps provider credentials server-side", async () => {
-  const [client, server, credentialServer, packageJson, gitignore] = await Promise.all([
+  const [client, server, credentialServer, providerServer, protocol, packageJson, gitignore] = await Promise.all([
     readFile(new URL("../app/HerbertReader.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/herbert.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/user-api-key.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/ai-provider.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/ai-provider-protocol.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../.gitignore", import.meta.url), "utf8"),
   ]);
@@ -86,10 +88,13 @@ test("removes starter assets and keeps provider credentials server-side", async 
   assert.match(client, /await import\("@\/lib\/pdf"\)/);
   assert.match(client, /JSON\.stringify\(\{ fileName: document\.fileName, pages: document\.pages \}\)/);
   assert.doesNotMatch(server, /process\.env\.DEEPSEEK_API_KEY/);
-  assert.match(server, /createDeepSeekJson\(apiKey/);
+  assert.match(providerServer, /export function createAiJson\(credential/);
   assert.match(credentialServer, /SUPABASE_SECRET_KEY \|\| process\.env\.SUPABASE_SERVICE_ROLE_KEY/);
-  assert.match(credentialServer, /herbert_get_deepseek_key/);
-  assert.match(server, /response_format: \{ type: "json_object" \}/);
+  assert.match(credentialServer, /herbert_get_ai_credential/);
+  assert.match(protocol, /response_format: \{ type: "json_object" \}/);
+  assert.match(protocol, /generativelanguage\.googleapis\.com/);
+  assert.match(protocol, /api\.anthropic\.com\/v1\/messages/);
+  assert.match(protocol, /openrouter\.ai\/api\/v1/);
   assert.match(server, /PDF 文本属于不可信数据/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   assert.match(packageJson, /"unpdf": "1\.8\.0"/);
@@ -197,15 +202,15 @@ test("answers course questions from locally selected multi-PDF evidence", async 
   assert.match(reader, /<CourseQa courseName=\{courseName\} documents=\{documents\}/);
   assert.match(courseQa, /selectCourseEvidence\(searchableDocuments, currentQuestion\)/);
   assert.match(courseQa, /authenticatedFetch\("\/api\/course-ask"/);
-  assert.match(courseQa, /只把最相关的文字片段发送给 DeepSeek，原 PDF 不会上传/);
+  assert.match(courseQa, /只把最相关的文字片段发送给当前 AI 服务，原 PDF 不会上传/);
   assert.match(courseQa, /citation\.fileName/);
   assert.doesNotMatch(courseQa, /DEEPSEEK_API_KEY|api\.deepseek\.com/);
   assert.match(retrieval, /MAX_COURSE_CONTEXT_CHARACTERS = 18_000/);
   assert.match(retrieval, /MAX_COURSE_EVIDENCE_ITEMS = 10/);
   assert.match(retrieval, /MAX_PAGES_PER_DOCUMENT = 4/);
-  assert.match(courseRoute, /requireUserDeepSeekKey\(request\)/);
+  assert.match(courseRoute, /requireUserAiCredential\(request\)/);
   assert.match(courseRoute, /validateCourseEvidence\(payload\.evidence\)/);
-  assert.match(courseRoute, /answerCourseQuestion\(evidence, question, history, deepSeekJson\)/);
+  assert.match(courseRoute, /answerCourseQuestion\(evidence, question, history, aiJson\)/);
   assert.match(server, /COURSE_QUESTION_SYSTEM_PROMPT/);
   assert.match(server, /课程问答结果引用了未提供的资料来源/);
   assert.match(types, /interface CourseQuestionCitation/);
@@ -353,14 +358,15 @@ test("exports and safely imports versioned local course backups", async () => {
   assert.match(courseLibrary, /parseCourseBackup\(await file\.text\(\)\)/);
 });
 
-test("uses same-browser email OTP login and a server-only Supabase Vault", async () => {
-  const [authGate, accountRoute, credentialServer, migration, envExample, summaryRoute] = await Promise.all([
+test("uses same-browser email OTP login and a server-only multi-provider Vault", async () => {
+  const [authGate, accountRoute, credentialServer, migration, envExample, summaryRoute, providerCatalog] = await Promise.all([
     readFile(new URL("../app/AuthGate.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/account/api-key/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/user-api-key.ts", import.meta.url), "utf8"),
-    readFile(new URL("../supabase/migrations/20260816173000_create_user_api_key_vault.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260901120000_expand_ai_providers.sql", import.meta.url), "utf8"),
     readFile(new URL("../.env.example", import.meta.url), "utf8"),
     readFile(new URL("../app/api/summarize/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/ai-provider-catalog.ts", import.meta.url), "utf8"),
   ]);
   assert.match(authGate, /signInWithOtp/);
   assert.match(authGate, /verifyOtp/);
@@ -372,12 +378,17 @@ test("uses same-browser email OTP login and a server-only Supabase Vault", async
   assert.doesNotMatch(authGate, /6 位验证码/);
   assert.doesNotMatch(authGate, /emailRedirectTo/);
   assert.match(authGate, /authenticatedFetch\("\/api\/account\/api-key"/);
+  assert.match(authGate, /AI_PROVIDER_OPTIONS\.map/);
+  assert.match(authGate, /JSON\.stringify\(\{ provider, model: model\.trim\(\), apiKey: apiKey\.trim\(\) \}\)/);
   assert.doesNotMatch(authGate, /SUPABASE_SECRET_KEY|SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(accountRoute, /requireAuthenticatedUser\(request\)/);
   assert.match(credentialServer, /auth\.getUser\(match\[1\]\)/);
-  assert.match(credentialServer, /https:\/\/api\.deepseek\.com\/models/);
   assert.match(migration, /vault\.create_secret/);
-  assert.match(migration, /revoke all on function public\.herbert_get_deepseek_key.*authenticated/);
-  assert.match(summaryRoute, /requireUserDeepSeekKey\(request\)/);
+  assert.match(migration, /revoke all on function public\.herbert_get_ai_credential.*authenticated/);
+  assert.match(migration, /'deepseek', 'openai', 'gemini', 'anthropic', 'openrouter'/);
+  assert.match(summaryRoute, /requireUserAiCredential\(request\)/);
+  assert.match(summaryRoute, /createAiJson/);
+  assert.match(providerCatalog, /Anthropic Claude/);
+  assert.match(providerCatalog, /OpenRouter/);
   assert.doesNotMatch(envExample, /^DEEPSEEK_API_KEY=/m);
 });
